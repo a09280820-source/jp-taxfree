@@ -1,5 +1,5 @@
 /* 離線快取：App 本體優先用網路（有更新就拿新的），沒網路就用快取 */
-const CACHE = 'jptax-v6';
+const CACHE = 'jptax-v7';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'calc.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 const STATIC_HOSTS = ['cdn.sheetjs.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
@@ -35,7 +35,7 @@ self.addEventListener('fetch', e => {
   // 自己網站的檔案：網路優先，失敗用快取
   if (url.origin === location.origin) {
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(req, { cache: 'no-cache' }).then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy));
         return res;
