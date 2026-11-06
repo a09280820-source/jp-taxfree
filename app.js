@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -71,11 +71,17 @@ function db() {
       d.createObjectStore('receipts', { keyPath: 'id' });
       d.createObjectStore('photos', { keyPath: 'id' });
     };
-    q.onsuccess = () => res(q.result);
-    q.onerror = () => rej(q.error);
+    q.onsuccess = () => {
+      const d = q.result;
+      d.onclose = () => { _db = null; };
+      d.onversionchange = () => { d.close(); _db = null; };
+      res(d);
+    };
+    q.onerror = () => { _db = null; rej(q.error); };
+    q.onblocked = () => { _db = null; };
   }));
 }
-function tx(store, mode, fn) {
+function tx1(store, mode, fn) {
   return db().then(d => new Promise((res, rej) => {
     const t = d.transaction(store, mode);
     const r = fn(t.objectStore(store));
@@ -83,6 +89,16 @@ function tx(store, mode, fn) {
     t.onerror = () => rej(t.error);
     t.onabort = () => rej(t.error);
   }));
+}
+/* 手機瀏覽器切到背景後可能把資料庫連線關掉：失敗時重連再試一次 */
+function tx(store, mode, fn) {
+  return tx1(store, mode, fn).catch(e => {
+    if (e && (e.name === 'InvalidStateError' || /closing|closed/i.test(String(e.message)))) {
+      _db = null;
+      return tx1(store, mode, fn);
+    }
+    throw e;
+  });
 }
 const kvGet = k => tx('kv', 'readonly', s => s.get(k));
 const kvSet = (k, v) => tx('kv', 'readwrite', s => s.put(v, k));
