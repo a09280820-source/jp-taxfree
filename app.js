@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.1.3';
+const VERSION = '1.2.0';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -493,7 +493,8 @@ function viewReceipts() {
   const rt = rate();
   const nd = all.filter(isDraft).length;
   let h = '<button class="btn line" style="margin-bottom:10px" data-act="multi">一次選多張照片</button>';
-  if (nd) h += '<div class="note" style="margin-bottom:10px"><b>' + nd + '</b> 張照片還沒辨識：點開會自動 AI 辨識，核對後按儲存。</div>';
+  if (nd) h += '<div class="note" style="margin-bottom:10px"><b>' + nd + '</b> 張照片還沒辨識：可以點開單張自動辨識，或一鍵依序辨識全部（一次一張）。核對後再按儲存。</div>' +
+    '<button id="batchBtn" class="btn" style="margin-bottom:10px" data-act="batch-ocr">' + (S.batchBusy ? '辨識中…' : '一鍵辨識全部待辨識（' + nd + ' 張）') + '</button>';
   h += refundFilterBar(all);
   if (S.refundFilter) {
     const o = summarizeByCo(list, gm)[0];
@@ -873,6 +874,56 @@ async function handleMulti(files) {
   sync();
 }
 
+/* ========== 一鍵依序辨識所有草稿（一次一張，不會同時呼叫） ========== */
+async function batchOcr() {
+  if (S.batchBusy) return;
+  if (!navigator.onLine) { toast('離線中，連上網路後再辨識'); return; }
+  if (configMissing()) return;
+  const drafts = scoped().filter(r => isDraft(r) && r.owner === S.user.email);
+  if (!drafts.length) { toast('沒有待辨識的照片'); return; }
+  S.batchBusy = true;
+  let ok = 0, fail = 0, stop = '';
+  for (let i = 0; i < drafts.length; i++) {
+    const btn = $('#batchBtn'); if (btn) { btn.disabled = true; btn.textContent = '辨識中 ' + (i + 1) + ' / ' + drafts.length + '…'; }
+    const r = drafts[i];
+    try {
+      const p = await getPhotoRec(r.id);
+      if (!p || !p.blob) { fail++; continue; }
+      const small = await compress(p.blob, 1024, 0.7).catch(() => null);
+      const o = await api('ocr', { photoBase64: await blobToB64(small || p.blob) }, 60000);
+      const m = C.matchStore(o.store, S.stores);
+      const store = m ? m.name : (o.store ? String(o.store).slice(0, 40) : '');
+      if (!store) { fail++; continue; }
+      const incl = o.totalIncl > 0 ? Math.round(o.totalIncl) : 0;
+      let rate = (o.rate === 8 || o.rate === 10) ? o.rate : 10, tax = C.splitTax(incl, rate).tax;
+      if (incl && o.tax != null && o.tax >= 0 && o.tax !== tax) {
+        tax = Math.min(incl, Math.round(o.tax));
+        rate = incl - tax > 0 ? Math.round(tax / (incl - tax) * 100) : 10;
+      }
+      if (!S.stores.some(x => x.name.toLowerCase() === store.toLowerCase())) {
+        S.stores.push({ id: 'L' + Date.now() + i, name: store, nameJa: '', aliases: '', category: '其他', pending: true });
+        await saveStores();
+      }
+      Object.assign(r, {
+        store, date: (o.date && /^\d{4}-\d{2}-\d{2}$/.test(o.date)) ? o.date : r.date,
+        amountIncl: incl, tax, amountExcl: incl - tax, rate, needsReview: incl === 0,
+        refundCo: r.refundCo || lastRefundFor(store), sync: r.sync === 'add' ? 'add' : 'update'
+      });
+      await putReceipt(r);
+      ok++;
+    } catch (e) {
+      fail++;
+      if (e.code === 'AUTH') { stop = '請先重新登入'; break; }
+      if (e.code === 'OCR_LIMIT') { stop = 'AI 辨識額度用完了，剩下的請手動輸入'; break; }
+    }
+    render(true);
+  }
+  S.batchBusy = false;
+  render(true);
+  toast(stop || ('完成：辨識 ' + ok + ' 張' + (fail ? '，' + fail + ' 張失敗（仍是待辨識）' : '') + '。請逐張點開核對金額'));
+  sync();
+}
+
 /* ========== 匯出 Excel ========== */
 function exportExcel(all) {
   if (typeof XLSX === 'undefined') { toast('Excel 元件尚未載入，請連網後再試一次'); return; }
@@ -989,6 +1040,7 @@ const handlers = {
   cam() { $('#fileCam').click(); },
   pick() { $('#filePick').click(); },
   multi() { $('#fileMulti').click(); },
+  'batch-ocr'() { batchOcr(); },
   ocr() { runOcr(); },
   save() { saveForm(); },
   delete() { deleteForm(); },
