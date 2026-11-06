@@ -208,16 +208,22 @@ function showRelogin() {
 
 /* ========== 後端呼叫 ========== */
 function netErr(msg) { const e = new Error(msg || '網路不穩，稍後再試'); e.code = 'NET'; return e; }
-async function api(action, payload) {
+async function api(action, payload, timeoutMs) {
   await ensureToken();
   let res;
+  const ctl = timeoutMs ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
   try {
     res = await fetch(CFG.API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, token: S.token, payload: payload || {} })
+      body: JSON.stringify({ action, token: S.token, payload: payload || {} }),
+      signal: ctl ? ctl.signal : undefined
     });
-  } catch (e) { throw netErr(); }
+  } catch (e) {
+    if (e && e.name === 'AbortError') { const te = new Error('辨識太久沒回應，請稍後再試，或先手動輸入金額'); te.code = 'TIMEOUT'; throw te; }
+    throw netErr();
+  } finally { if (timer) clearTimeout(timer); }
   let d;
   try { d = await res.json(); } catch (e) { throw netErr('伺服器回應異常'); }
   if (!d.ok) {
@@ -690,7 +696,8 @@ async function runOcr() {
   const btn = $('#ocrBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>辨識中…'; }
   try {
-    const o = await api('ocr', { photoBase64: await blobToB64(F.photoBlob) });
+    const small = await compress(F.photoBlob, 1024, 0.7).catch(() => null);
+    const o = await api('ocr', { photoBase64: await blobToB64(small || F.photoBlob) }, 60000);
     applyOcr(o);
     toast('已預填，請核對金額與店家');
   } catch (e) {
