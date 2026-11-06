@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -433,8 +433,12 @@ function viewHome() {
   G.filter(g => g.date === today && !g.eligible && g.excl > 0).forEach(g => {
     alerts.push('<div class="alert warn"><b>' + esc(g.store) + '</b> 今天未稅 ' + yen(g.excl) + '，再買 <b>' + yen(g.shortfall) + '</b>（未稅）就能退稅</div>');
   });
-  const review = list.filter(r => r.needsReview).length;
-  if (review) alerts.push('<div class="alert bad">有 <b>' + review + '</b> 張收據還沒補金額</div>');
+  const nDraft = list.filter(isDraft).length;
+  const noAmt = list.filter(r => !isDraft(r) && r.needsReview && !r.amountIncl).length;
+  const toCheck = list.filter(r => !isDraft(r) && r.needsReview && r.amountIncl > 0).length;
+  if (nDraft) alerts.push('<div class="alert bad">有 <b>' + nDraft + '</b> 張照片還沒 AI 辨識</div>');
+  if (noAmt) alerts.push('<div class="alert bad">有 <b>' + noAmt + '</b> 張收據還沒補金額</div>');
+  if (toCheck) alerts.push('<div class="alert bad">有 <b>' + toCheck + '</b> 張 AI 填寫的收據待核對（點開確認後按儲存）</div>');
   const unpacked = G.filter(g => g.eligible && !g.packedAll).length;
   if (unpacked) alerts.push('<div class="alert">有 <b>' + unpacked + '</b> 組已達標、還沒勾「已打包」</div>');
   G.filter(g => g.eligible).forEach(g => {
@@ -508,7 +512,8 @@ function viewReceipts() {
     let b = '';
     if (r.sync && r.sync !== 'synced') b += '<span class="badge warn">待上傳</span>';
     if (isDraft(r)) b += '<span class="badge bad">待辨識</span>';
-    else if (r.needsReview) b += '<span class="badge bad">待補金額</span>';
+    else if (r.needsReview && !r.amountIncl) b += '<span class="badge bad">待補金額</span>';
+    else if (r.needsReview) b += '<span class="badge bad">待核對</span>';
     else if (g) b += g.eligible ? '<span class="badge ok">可退稅</span>' : '<span class="badge warn">未達門檻</span>';
     if (r.refundCo) b += '<span class="badge">' + esc(r.refundCo.replace(/（.*）/, '')) + '</span>';
     if (r.packed) b += '<span class="badge ok">已打包</span>';
@@ -906,7 +911,7 @@ async function batchOcr() {
       }
       Object.assign(r, {
         store, date: (o.date && /^\d{4}-\d{2}-\d{2}$/.test(o.date)) ? o.date : r.date,
-        amountIncl: incl, tax, amountExcl: incl - tax, rate, needsReview: incl === 0,
+        amountIncl: incl, tax, amountExcl: incl - tax, rate, needsReview: true,
         refundCo: r.refundCo || lastRefundFor(store), sync: r.sync === 'add' ? 'add' : 'update'
       });
       await putReceipt(r);
