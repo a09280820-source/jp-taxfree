@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.2.1';
+const VERSION = '1.3.0';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -273,7 +273,7 @@ async function pullInit() {
 
 const pickFields = r => ({
   id: r.id, date: r.date, store: r.store, amountIncl: r.amountIncl, tax: r.tax, amountExcl: r.amountExcl,
-  rate: r.rate, note: r.note, packed: r.packed, needsReview: r.needsReview, createdAt: r.createdAt, refundCo: r.refundCo || ''
+  rate: r.rate, note: r.note, packed: r.packed, needsReview: r.needsReview, createdAt: r.createdAt, refundCo: r.refundCo || '', consumed: !!r.consumed
 });
 
 async function pushPending() {
@@ -478,7 +478,7 @@ function summarizeByCo(list, gm) {
     const k = coOf(r);
     const o = m.get(k) || { co: k, n: 0, incl: 0, refund: 0 };
     const g = gm.get(C.groupKey(r));
-    o.n++; o.incl += r.amountIncl; if (g && g.eligible) o.refund += r.tax || 0;
+    o.n++; o.incl += r.amountIncl; if (g && g.eligible && !r.consumed) o.refund += r.tax || 0;
     m.set(k, o);
   });
   return Array.from(m.values()).sort((a, b) => coOrder(a.co, b.co));
@@ -516,6 +516,7 @@ function viewReceipts() {
     else if (r.needsReview) b += '<span class="badge bad">待核對</span>';
     else if (g) b += g.eligible ? '<span class="badge ok">可退稅</span>' : '<span class="badge warn">未達門檻</span>';
     if (r.refundCo) b += '<span class="badge">' + esc(r.refundCo.replace(/（.*）/, '')) + '</span>';
+    if (r.consumed) b += '<span class="badge warn">馬上吃掉／使用</span>';
     if (r.packed) b += '<span class="badge ok">已打包</span>';
     if (S.scope === 'all') b += '<span class="badge">' + esc(r.ownerName) + '</span>';
     h += '<button class="item" data-act="edit" data-id="' + esc(r.id) + '">' +
@@ -693,7 +694,9 @@ function renderForm() {
     '<div class="field" id="fTaxWrap"><label>消費稅額（日圓）</label><input id="fTax" class="input num" type="number" inputmode="numeric" value="' + esc(b.tax || '') + '" placeholder="收據上的内消費税"' + ro + '></div></div>' +
     '<div id="calcBox" class="calcbox"></div>' +
     '<div class="field"><label>備註</label><input id="fNote" class="input" value="' + esc(b.note || '') + '" placeholder="例如：化妝水、零食"' + ro + '></div>' +
-    '<label class="check" style="margin:0 0 14px"><input id="fPacked" type="checkbox"' + (b.packed ? ' checked' : '') + ro + '> 已放進隨身行李</label>' +
+    '<label class="check" style="margin:0 0 6px"><input id="fPacked" type="checkbox"' + (b.packed ? ' checked' : '') + ro + '> 已放進隨身行李</label>' +
+    '<label class="check" style="margin:0 0 2px"><input id="fConsumed" type="checkbox"' + (b.consumed ? ' checked' : '') + ro + '> 馬上吃掉／使用</label>' +
+    '<p class="small muted" style="margin:0 0 14px 28px">食物、飲料、貼布、藥品、化妝品等在日本用掉的才勾；衣服穿著不用勾。勾了這張不計入退稅。</p>' +
     (F.readonly ? '<p class="muted small">這是別人的收據，只能查看。</p>' :
       '<button class="btn" data-act="save">儲存</button>' + (F.isNew ? '' : '<button class="btn ghost" style="color:var(--red)" data-act="delete">刪除這張收據</button>')) +
     '</div>');
@@ -731,7 +734,7 @@ function readForm() {
     tax = Math.max(0, Math.min(incl, Math.round(Number($('#fTax').value) || 0)));
     rate = incl - tax > 0 ? Math.round(tax / (incl - tax) * 100) : 10;
   } else { rate = Number(rs); tax = C.splitTax(incl, rate).tax; }
-  return { store, date: $('#fDate').value, incl, rate, rs, tax, excl: incl - tax, note: $('#fNote').value.trim(), packed: $('#fPacked').checked, refundCo: $('#fRefund') ? $('#fRefund').value : '' };
+  return { store, date: $('#fDate').value, incl, rate, rs, tax, excl: incl - tax, note: $('#fNote').value.trim(), packed: $('#fPacked').checked, consumed: $('#fConsumed') ? $('#fConsumed').checked : false, refundCo: $('#fRefund') ? $('#fRefund').value : '' };
 }
 
 function updateCalc() {
@@ -748,9 +751,10 @@ function updateCalc() {
       '<div class="l"><span>未稅</span><span class="num">' + yen(f.excl) + '</span></div>';
     if (f.store && f.date) {
       const owner = F.base ? F.base.owner : S.user.email;
-      const others = visible().filter(r => r.id !== F.id && r.owner === owner && r.store === f.store && r.date === f.date);
-      const exclSum = sumBy(others, 'amountExcl') + f.excl;
-      const taxSum = sumBy(others, 'tax') + f.tax;
+      const others = visible().filter(r => r.id !== F.id && r.owner === owner && r.store === f.store && r.date === f.date && !r.consumed);
+      const exclSum = sumBy(others, 'amountExcl') + (f.consumed ? 0 : f.excl);
+      const taxSum = sumBy(others, 'tax') + (f.consumed ? 0 : f.tax);
+      if (f.consumed) h += '<div class="l"><span class="no">馬上吃掉／使用</span><span class="num no">這張不計入退稅</span></div>';
       h += '<div class="l"><span>同店同日未稅累計</span><span class="num">' + yen(exclSum) + '</span></div>';
       h += exclSum >= TH
         ? '<div class="l"><span class="ok">已達門檻</span><span class="num ok">預估退 ' + yen(taxSum) + '</span></div>'
@@ -817,7 +821,7 @@ async function saveForm() {
   const rec = {
     id: F.id, owner: S.user.email, ownerName: S.user.name,
     date: f.date, store: f.store, amountIncl: f.incl, tax: f.tax, amountExcl: f.excl, rate: f.rate,
-    note: f.note, packed: f.packed, refundCo: f.refundCo, needsReview: f.incl === 0,
+    note: f.note, packed: f.packed, consumed: f.consumed, refundCo: f.refundCo, needsReview: f.incl === 0,
     photoFileId: base ? base.photoFileId || '' : '',
     createdAt: base ? base.createdAt : Date.now(),
     sync: (!base || base.sync === 'add') ? 'add' : 'update'
@@ -940,19 +944,19 @@ function exportExcel(all) {
   const gm = new Map(G.map(g => [g.key, g]));
   const today = C.localDate();
 
-  const rows = [['購買日', '購買者', '店家', '含稅金額(JPY)', '消費稅(JPY)', '未稅金額(JPY)', '稅率(%)', '含稅金額(TWD)', '同店同日是否達門檻', '預估退稅(JPY)', '預估退稅(TWD)', '出境期限', '剩餘天數', '已打包', '備註', '收據照片連結', '退稅公司']];
+  const rows = [['購買日', '購買者', '店家', '含稅金額(JPY)', '消費稅(JPY)', '未稅金額(JPY)', '稅率(%)', '含稅金額(TWD)', '同店同日是否達門檻', '預估退稅(JPY)', '預估退稅(TWD)', '出境期限', '剩餘天數', '已打包', '備註', '收據照片連結', '退稅公司', '馬上吃掉／使用']];
   list.forEach(r => {
     const g = gm.get(C.groupKey(r));
-    const ok = g && g.eligible;
+    const ok = g && g.eligible && !r.consumed;
     rows.push([r.date, r.ownerName, r.store, r.amountIncl, r.tax, r.amountExcl, r.rate, C.toTWD(r.amountIncl, rt),
       ok ? '是' : '否', ok ? r.tax : 0, ok ? C.toTWD(r.tax, rt) : 0,
       C.deadlineDate(r.date, CFG.DEADLINE_DAYS), C.daysLeft(r.date, today, CFG.DEADLINE_DAYS),
-      r.packed ? '是' : '否', r.note || '', r.photoFileId ? 'https://drive.google.com/file/d/' + r.photoFileId + '/view' : '', r.refundCo || '']);
+      r.packed ? '是' : '否', r.note || '', r.photoFileId ? 'https://drive.google.com/file/d/' + r.photoFileId + '/view' : '', r.refundCo || '', r.consumed ? '是' : '否']);
   });
   const n = rows.length;
   rows.push(['合計', '', '', { f: 'SUM(D2:D' + n + ')' }, { f: 'SUM(E2:E' + n + ')' }, { f: 'SUM(F2:F' + n + ')' }, '', { f: 'SUM(H2:H' + n + ')' }, '', { f: 'SUM(J2:J' + n + ')' }, { f: 'SUM(K2:K' + n + ')' }]);
   const ws1 = XLSX.utils.aoa_to_sheet(rows);
-  ws1['!cols'] = [12, 10, 22, 14, 12, 14, 8, 14, 16, 14, 14, 12, 10, 8, 20, 40, 22].map(w => ({ wch: w }));
+  ws1['!cols'] = [12, 10, 22, 14, 12, 14, 8, 14, 16, 14, 14, 12, 10, 8, 20, 40, 22, 16].map(w => ({ wch: w }));
 
   const rows2 = [['購買日', '購買者', '店家', '收據張數', '含稅合計(JPY)', '未稅合計(JPY)', '是否達 ' + TH.toLocaleString('en-US') + ' 門檻', '還差(JPY,未稅)', '預估退稅(JPY)', '預估退稅(TWD)', '已打包', '退稅公司']];
   G.slice().sort((a, b) => String(a.date).localeCompare(b.date) || String(a.store).localeCompare(b.store)).forEach(g => {

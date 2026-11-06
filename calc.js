@@ -37,8 +37,11 @@
       }
       g.receipts.push(r);
       g.incl += r.amountIncl || 0;
-      g.tax += r.tax || 0;
-      g.excl += r.amountExcl || 0;
+      // 馬上吃掉／使用的收據不會帶出境，不列入退稅門檻與退稅金額
+      if (!r.consumed) {
+        g.tax += r.tax || 0;
+        g.excl += r.amountExcl || 0;
+      }
     });
     const out = Array.from(map.values());
     out.forEach(function (g) {
