@@ -2,6 +2,7 @@
 'use strict';
 
 const CFG = window.APP_CONFIG;
+const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
 const VERSION = '1.0.0';
@@ -250,7 +251,7 @@ async function pullInit() {
 
 const pickFields = r => ({
   id: r.id, date: r.date, store: r.store, amountIncl: r.amountIncl, tax: r.tax, amountExcl: r.amountExcl,
-  rate: r.rate, note: r.note, packed: r.packed, needsReview: r.needsReview, createdAt: r.createdAt
+  rate: r.rate, note: r.note, packed: r.packed, needsReview: r.needsReview, createdAt: r.createdAt, refundCo: r.refundCo || ''
 });
 
 async function pushPending() {
@@ -549,6 +550,27 @@ async function fetchRemotePhoto(id) {
   } catch (e) { /* 照片抓不到就算了 */ }
 }
 
+function refundOptions(sel) {
+  let h = '<option value="">選擇退稅公司…</option>';
+  REFUND_COS.forEach(c => { h += '<option value="' + esc(c) + '"' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>'; });
+  if (sel && REFUND_COS.indexOf(sel) < 0) h += '<option value="' + esc(sel) + '" selected>' + esc(sel) + '</option>';
+  return h;
+}
+
+/* 同一間店上次選過的退稅公司，下次選到這間店就自動帶入 */
+function lastRefundFor(store) {
+  if (!store) return '';
+  const l = S.receipts.filter(r => r.store === store && r.refundCo).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return l.length ? l[0].refundCo : '';
+}
+function autoRefund() {
+  const sel = $('#fRefund');
+  if (!sel || F.readonly || (F.refundTouched && sel.value)) return;
+  const st = $('#fStore').value;
+  const v = st && st !== '__other' ? lastRefundFor(st) : '';
+  if (v) sel.value = v;
+}
+
 function storeOptions(sel) {
   const cats = {};
   S.stores.forEach(s => { const c = s.category || '其他'; (cats[c] = cats[c] || []).push(s); });
@@ -576,6 +598,7 @@ function renderForm() {
     '<div id="ocrWrap" style="margin-bottom:12px"></div>' +
     '<div class="field"><label>店家</label><select id="fStore" class="select"' + ro + '>' + storeOptions(selVal) + '</select>' +
     '<input id="fStoreOther" class="input" style="margin-top:6px" placeholder="輸入店名" value="' + esc(inList ? '' : (b.store || '')) + '"' + (selVal === '__other' ? '' : ' hidden') + ro + '></div>' +
+    '<div class="field"><label>退稅公司（收據上的 QR Code 屬於哪一家）</label><select id="fRefund" class="select"' + ro + '>' + refundOptions(b.refundCo || '') + '</select></div>' +
     '<div class="two"><div class="field"><label>購買日</label><input id="fDate" class="input" type="date" value="' + esc(b.date || C.localDate()) + '"' + ro + '></div>' +
     '<div class="field"><label>含稅金額（日圓）</label><input id="fIncl" class="input num" type="number" inputmode="numeric" value="' + esc(incl) + '" placeholder="收據上的合計"' + ro + '></div></div>' +
     '<div class="two"><div class="field"><label>稅率</label><select id="fRate" class="select"' + ro + '><option value="10"' + (rateSel === '10' ? ' selected' : '') + '>10%（一般商品）</option><option value="8"' + (rateSel === '8' ? ' selected' : '') + '>8%（食品、飲料）</option><option value="x"' + (rateSel === 'x' ? ' selected' : '') + '>混合／自填稅額</option></select></div>' +
@@ -620,7 +643,7 @@ function readForm() {
     tax = Math.max(0, Math.min(incl, Math.round(Number($('#fTax').value) || 0)));
     rate = incl - tax > 0 ? Math.round(tax / (incl - tax) * 100) : 10;
   } else { rate = Number(rs); tax = C.splitTax(incl, rate).tax; }
-  return { store, date: $('#fDate').value, incl, rate, rs, tax, excl: incl - tax, note: $('#fNote').value.trim(), packed: $('#fPacked').checked };
+  return { store, date: $('#fDate').value, incl, rate, rs, tax, excl: incl - tax, note: $('#fNote').value.trim(), packed: $('#fPacked').checked, refundCo: $('#fRefund') ? $('#fRefund').value : '' };
 }
 
 function updateCalc() {
@@ -683,6 +706,7 @@ function applyOcr(o) {
   const m = C.matchStore(o.store, S.stores);
   if (m) { $('#fStore').value = m.name; }
   else if (o.store) { $('#fStore').value = '__other'; $('#fStoreOther').value = String(o.store).slice(0, 40); }
+  autoRefund();
   if (o.date && /^\d{4}-\d{2}-\d{2}$/.test(o.date)) $('#fDate').value = o.date;
   if (o.totalIncl > 0) {
     $('#fIncl').value = o.totalIncl;
@@ -703,7 +727,7 @@ async function saveForm() {
   const rec = {
     id: F.id, owner: S.user.email, ownerName: S.user.name,
     date: f.date, store: f.store, amountIncl: f.incl, tax: f.tax, amountExcl: f.excl, rate: f.rate,
-    note: f.note, packed: f.packed, needsReview: f.incl === 0,
+    note: f.note, packed: f.packed, refundCo: f.refundCo, needsReview: f.incl === 0,
     photoFileId: base ? base.photoFileId || '' : '',
     createdAt: base ? base.createdAt : Date.now(),
     sync: (!base || base.sync === 'add') ? 'add' : 'update'
@@ -749,26 +773,26 @@ function exportExcel(all) {
   const gm = new Map(G.map(g => [g.key, g]));
   const today = C.localDate();
 
-  const rows = [['購買日', '購買者', '店家', '含稅金額(JPY)', '消費稅(JPY)', '未稅金額(JPY)', '稅率(%)', '含稅金額(TWD)', '同店同日是否達門檻', '預估退稅(JPY)', '預估退稅(TWD)', '出境期限', '剩餘天數', '已打包', '備註', '收據照片連結']];
+  const rows = [['購買日', '購買者', '店家', '含稅金額(JPY)', '消費稅(JPY)', '未稅金額(JPY)', '稅率(%)', '含稅金額(TWD)', '同店同日是否達門檻', '預估退稅(JPY)', '預估退稅(TWD)', '出境期限', '剩餘天數', '已打包', '備註', '收據照片連結', '退稅公司']];
   list.forEach(r => {
     const g = gm.get(C.groupKey(r));
     const ok = g && g.eligible;
     rows.push([r.date, r.ownerName, r.store, r.amountIncl, r.tax, r.amountExcl, r.rate, C.toTWD(r.amountIncl, rt),
       ok ? '是' : '否', ok ? r.tax : 0, ok ? C.toTWD(r.tax, rt) : 0,
       C.deadlineDate(r.date, CFG.DEADLINE_DAYS), C.daysLeft(r.date, today, CFG.DEADLINE_DAYS),
-      r.packed ? '是' : '否', r.note || '', r.photoFileId ? 'https://drive.google.com/file/d/' + r.photoFileId + '/view' : '']);
+      r.packed ? '是' : '否', r.note || '', r.photoFileId ? 'https://drive.google.com/file/d/' + r.photoFileId + '/view' : '', r.refundCo || '']);
   });
   const n = rows.length;
   rows.push(['合計', '', '', { f: 'SUM(D2:D' + n + ')' }, { f: 'SUM(E2:E' + n + ')' }, { f: 'SUM(F2:F' + n + ')' }, '', { f: 'SUM(H2:H' + n + ')' }, '', { f: 'SUM(J2:J' + n + ')' }, { f: 'SUM(K2:K' + n + ')' }]);
   const ws1 = XLSX.utils.aoa_to_sheet(rows);
-  ws1['!cols'] = [12, 10, 22, 14, 12, 14, 8, 14, 16, 14, 14, 12, 10, 8, 20, 40].map(w => ({ wch: w }));
+  ws1['!cols'] = [12, 10, 22, 14, 12, 14, 8, 14, 16, 14, 14, 12, 10, 8, 20, 40, 22].map(w => ({ wch: w }));
 
-  const rows2 = [['購買日', '購買者', '店家', '收據張數', '含稅合計(JPY)', '未稅合計(JPY)', '是否達 ' + TH.toLocaleString('en-US') + ' 門檻', '還差(JPY,未稅)', '預估退稅(JPY)', '預估退稅(TWD)', '已打包']];
+  const rows2 = [['購買日', '購買者', '店家', '收據張數', '含稅合計(JPY)', '未稅合計(JPY)', '是否達 ' + TH.toLocaleString('en-US') + ' 門檻', '還差(JPY,未稅)', '預估退稅(JPY)', '預估退稅(TWD)', '已打包', '退稅公司']];
   G.slice().sort((a, b) => String(a.date).localeCompare(b.date) || String(a.store).localeCompare(b.store)).forEach(g => {
-    rows2.push([g.date, g.ownerName, g.store, g.receipts.length, g.incl, g.excl, g.eligible ? '是' : '否', g.shortfall, g.refund, C.toTWD(g.refund, rt), g.eligible ? (g.packedAll ? '是' : '否') : '']);
+    rows2.push([g.date, g.ownerName, g.store, g.receipts.length, g.incl, g.excl, g.eligible ? '是' : '否', g.shortfall, g.refund, C.toTWD(g.refund, rt), g.eligible ? (g.packedAll ? '是' : '否') : '', Array.from(new Set(g.receipts.map(x => x.refundCo).filter(Boolean))).join('、')]);
   });
   const ws2 = XLSX.utils.aoa_to_sheet(rows2);
-  ws2['!cols'] = [12, 10, 22, 10, 14, 14, 16, 14, 14, 14, 8].map(w => ({ wch: w }));
+  ws2['!cols'] = [12, 10, 22, 10, 14, 14, 16, 14, 14, 14, 8, 22].map(w => ({ wch: w }));
 
   const byOwner = new Map();
   list.forEach(r => { (byOwner.get(r.owner) || byOwner.set(r.owner, []).get(r.owner)).push(r); });
@@ -891,7 +915,11 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.matches && el.matches('input[data-act="pack"]')) handlers.pack(el);
-  else if (el.closest && el.closest('#modal')) updateCalc();
+  else if (el.closest && el.closest('#modal')) {
+    if (el.id === 'fRefund' && F) F.refundTouched = true;
+    if (el.id === 'fStore' && F) autoRefund();
+    updateCalc();
+  }
 });
 document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#modal')) updateCalc(); });
 ['fileCam', 'filePick'].forEach(id => $('#' + id).addEventListener('change', e => { handlePhoto(e.target.files[0]); e.target.value = ''; }));
