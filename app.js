@@ -696,10 +696,11 @@ async function runOcr() {
   const btn = $('#ocrBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>辨識中…'; }
   try {
+    const t0 = Date.now();
     const small = await compress(F.photoBlob, 1024, 0.7).catch(() => null);
     const o = await api('ocr', { photoBase64: await blobToB64(small || F.photoBlob) }, 60000);
     applyOcr(o);
-    toast('已預填，請核對金額與店家');
+    toast('已預填（' + String(o.model || '').replace('claude-', 'Claude ') + '，' + Math.round((Date.now() - t0) / 1000) + ' 秒），請核對金額與店家');
   } catch (e) {
     toast(e.code === 'AUTH' ? '請先重新登入' : e.message);
   } finally {
