@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.3.0';
+const VERSION = '1.3.1';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -424,7 +424,8 @@ function viewHome() {
       h += '<div class="num"><b>' + twd(spent) + '</b> <span class="muted">/ ' + twd(budget) + '</span></div>' +
         '<div class="meter ' + (bs.level === 'ok' ? '' : bs.level) + '"><i style="width:' + pct + '%"></i></div>' +
         '<div class="small ' + (bs.level === 'over' ? '' : 'muted') + '" style="' + (bs.level === 'over' ? 'color:var(--red);font-weight:700' : '') + '">' + msg + '</div>' +
-        '<div class="small muted" style="margin-top:4px">扣掉預估退稅後約 ' + twd(Math.max(0, spent - C.toTWD(refund, rt))) + '</div>';
+        '<div class="small muted" style="margin-top:6px">不算退稅，還剩 <b>' + twd(Math.max(0, budget - spent)) + '</b></div>' +
+        '<div class="small muted" style="margin-top:2px">退稅拿回後（預估），花費約 ' + twd(Math.max(0, spent - C.toTWD(refund, rt))) + '，還剩 <b>' + twd(Math.max(0, budget - Math.max(0, spent - C.toTWD(refund, rt)))) + '</b></div>';
     }
     h += '</div></div>';
   }
