@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.6.0';
+const VERSION = '1.6.1';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -407,8 +407,8 @@ function viewHome() {
   const fee = feeOfGroups(G), net = Math.max(0, refund - fee), rsp = refundSplit(G), netOwn = Math.max(0, rsp.own - feeOfGroups(G.map(g => Object.assign({}, g, { receipts: g.receipts.filter(r => !r.proxy) }))));
   const today = C.localDate();
   let h = '<div class="section"><div class="kpi">' +
-    '<div class="card"><div class="lab">總花費（含稅）</div><div class="big">' + yen(incl) + '</div><div class="sub">≈ ' + twd(C.toTWD(incl, rt)) + '</div>' + (inclProxy > 0 ? '<div class="sub">其中代購 ' + yen(inclProxy) + '</div>' : '') + '</div>' +
-    '<div class="card refund"><div class="lab">預估退稅</div><div class="big">' + yen(refund) + '</div><div class="sub">≈ ' + twd(C.toTWD(refund, rt)) + '</div>' + (refund > 0 ? '<div class="sub">扣手續費後約 ' + yen(net) + '（估）</div>' : '') + (rsp.proxy > 0 ? '<div class="sub">不含代購：' + yen(rsp.own) + '（代購 ' + yen(rsp.proxy) + '）</div>' : '') + '</div>' +
+    '<div class="card"><div class="lab">總花費（含稅）</div><div class="big">' + yen(incl) + '</div><div class="sub">≈ ' + twd(C.toTWD(incl, rt)) + '</div>' + '</div>' +
+    '<div class="card refund"><div class="lab">預估退稅</div><div class="big">' + yen(refund) + '</div><div class="sub">≈ ' + twd(C.toTWD(refund, rt)) + '</div>' + (refund > 0 ? '<div class="sub">扣手續費後約 ' + yen(net) + '（估）</div>' : '') + (rsp.proxy > 0 ? '<div class="sub">不含代購 ' + yen(rsp.own) + '</div><div class="sub">代購 ' + yen(rsp.proxy) + '</div>' : '') + '</div>' +
     '</div></div>';
 
   if (S.scope === 'me') {
@@ -421,13 +421,17 @@ function viewHome() {
     } else {
       const pct = Math.min(100, Math.round(bs.ratio * 100));
       const msg = bs.level === 'over' ? '已超過預算 ' + twd(spent - budget)
-        : bs.level === 'warn' ? '已用 ' + pct + '%，快到上限了，還剩 ' + twd(budget - spent)
-        : '還有 ' + twd(budget - spent) + ' 可以用';
-      h += '<div class="num"><b>' + twd(spent) + '</b> <span class="muted">/ ' + twd(budget) + '</span></div>' +
+        : bs.level === 'warn' ? '已用 ' + pct + '%，快到上限了' : '';
+      const left0 = Math.max(0, budget - spent);
+      const left1 = Math.max(0, budget - Math.max(0, spent - C.toTWD(netOwn, rt)));
+      const row = (k, v) => '<div class="row" style="margin-top:6px;gap:12px"><span class="small muted">' + k + '</span><span class="num"><b>' + v + '</b></span></div>';
+      h += '<div class="num"><b>' + twd(spent) + '</b> <span class="muted">/ ' + twd(budget) + '</span> <span class="small muted">（不含代購）</span></div>' +
         '<div class="meter ' + (bs.level === 'ok' ? '' : bs.level) + '"><i style="width:' + pct + '%"></i></div>' +
-        '<div class="small ' + (bs.level === 'over' ? '' : 'muted') + '" style="' + (bs.level === 'over' ? 'color:var(--red);font-weight:700' : '') + '">' + msg + '</div>' +
-        (inclProxy > 0 ? '<div class="small muted" style="margin-top:6px">已排除代購 ' + yen(inclProxy) + '</div>' : '') + '<div class="small muted" style="margin-top:6px">不算退稅，還剩 <b>' + twd(Math.max(0, budget - spent)) + '</b></div>' +
-        '<div class="small muted" style="margin-top:2px">退稅拿回後（預估，已扣手續費），花費約 ' + twd(Math.max(0, spent - C.toTWD(netOwn, rt))) + '，還剩 <b>' + twd(Math.max(0, budget - Math.max(0, spent - C.toTWD(netOwn, rt)))) + '</b></div>';
+        (msg ? '<div class="small" style="' + (bs.level === 'over' ? 'color:var(--red);font-weight:700' : 'color:var(--muted)') + '">' + msg + '</div>' : '') +
+        row('不算退稅，還剩', twd(left0)) +
+        row('退稅拿回後，還剩（估）', twd(left1)) +
+        '<div style="border-top:1px solid #E6EAEF;margin-top:10px;padding-top:8px">' +
+        row('代購總額', yen(inclProxy) + ' <span class="small muted">≈ ' + twd(C.toTWD(inclProxy, rt)) + '</span>') + '</div>';
     }
     h += '</div></div>';
   }

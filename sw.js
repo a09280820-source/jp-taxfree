@@ -1,5 +1,5 @@
 /* 離線快取：App 本體優先用網路（有更新就拿新的），沒網路就用快取 */
-const CACHE = 'jptax-v15';
+const CACHE = 'jptax-v16';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'calc.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 const STATIC_HOSTS = ['cdn.sheetjs.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
