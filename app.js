@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.4.1';
+const VERSION = '1.5.0';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -403,10 +403,11 @@ function viewHome() {
   const G = C.groupReceipts(list, TH);
   const incl = sumBy(list, 'amountIncl');
   const refund = G.reduce((a, g) => a + g.refund, 0);
+  const fee = feeOfGroups(G), net = Math.max(0, refund - fee);
   const today = C.localDate();
   let h = '<div class="section"><div class="kpi">' +
     '<div class="card"><div class="lab">總花費（含稅）</div><div class="big">' + yen(incl) + '</div><div class="sub">≈ ' + twd(C.toTWD(incl, rt)) + '</div></div>' +
-    '<div class="card refund"><div class="lab">預估退稅</div><div class="big">' + yen(refund) + '</div><div class="sub">≈ ' + twd(C.toTWD(refund, rt)) + '</div></div>' +
+    '<div class="card refund"><div class="lab">預估退稅</div><div class="big">' + yen(refund) + '</div><div class="sub">≈ ' + twd(C.toTWD(refund, rt)) + '</div>' + (refund > 0 ? '<div class="sub">扣手續費後約 ' + yen(net) + '（估）</div>' : '') + '</div>' +
     '</div></div>';
 
   if (S.scope === 'me') {
@@ -425,7 +426,7 @@ function viewHome() {
         '<div class="meter ' + (bs.level === 'ok' ? '' : bs.level) + '"><i style="width:' + pct + '%"></i></div>' +
         '<div class="small ' + (bs.level === 'over' ? '' : 'muted') + '" style="' + (bs.level === 'over' ? 'color:var(--red);font-weight:700' : '') + '">' + msg + '</div>' +
         '<div class="small muted" style="margin-top:6px">不算退稅，還剩 <b>' + twd(Math.max(0, budget - spent)) + '</b></div>' +
-        '<div class="small muted" style="margin-top:2px">退稅拿回後（預估），花費約 ' + twd(Math.max(0, spent - C.toTWD(refund, rt))) + '，還剩 <b>' + twd(Math.max(0, budget - Math.max(0, spent - C.toTWD(refund, rt)))) + '</b></div>';
+        '<div class="small muted" style="margin-top:2px">退稅拿回後（預估，已扣手續費），花費約 ' + twd(Math.max(0, spent - C.toTWD(net, rt))) + '，還剩 <b>' + twd(Math.max(0, budget - Math.max(0, spent - C.toTWD(net, rt)))) + '</b></div>';
     }
     h += '</div></div>';
   }
@@ -477,15 +478,15 @@ function summarizeByCo(list, gm) {
   const m = new Map();
   list.filter(r => r.amountIncl > 0).forEach(r => {
     const k = coOf(r);
-    const o = m.get(k) || { co: k, n: 0, incl: 0, refund: 0 };
+    const o = m.get(k) || { co: k, n: 0, incl: 0, refund: 0, fee: 0 };
     const g = gm.get(C.groupKey(r));
-    o.n++; o.incl += r.amountIncl; if (g && g.eligible && !r.consumed) o.refund += r.tax || 0;
+    o.n++; o.incl += r.amountIncl; if (g && g.eligible && !r.consumed) { o.refund += r.tax || 0; o.fee += feeOf(r); }
     m.set(k, o);
   });
   return Array.from(m.values()).sort((a, b) => coOrder(a.co, b.co));
 }
 function coSummaryLine(o, rt) {
-  return o.n + ' 張 · 含稅 ' + yen(o.incl) + ' · 預估退稅 ' + yen(o.refund) + '（≈ ' + twd(C.toTWD(o.refund, rt)) + '）';
+  return o.n + ' 張 · 含稅 ' + yen(o.incl) + ' · 預估退稅 ' + yen(o.refund) + '（≈ ' + twd(C.toTWD(o.refund, rt)) + '）' + (o.refund > 0 ? ' · 扣手續費後約 ' + yen(Math.max(0, o.refund - o.fee)) : '');
 }
 
 /* ----- 收據 ----- */
@@ -535,18 +536,20 @@ function viewTax() {
   const G = C.groupReceipts(list, TH);
   const el = G.filter(g => g.eligible);
   const refund = el.reduce((a, g) => a + g.refund, 0);
+  const fee = feeOfGroups(G), net = Math.max(0, refund - fee);
   const packed = el.filter(g => g.packedAll).length;
   const rt = rate(), today = C.localDate();
   let h = '<div class="section"><div class="card"><div class="lab small muted">預估退稅合計（未扣退稅業者手續費）</div>' +
     '<div class="num" style="font-size:24px;font-weight:700;color:var(--red)">' + yen(refund) + '</div>' +
-    '<div class="num small muted">≈ ' + twd(C.toTWD(refund, rt)) + ' · 已打包 ' + packed + ' / ' + el.length + ' 組</div></div></div>';
+    '<div class="num small muted">≈ ' + twd(C.toTWD(refund, rt)) + ' · 已打包 ' + packed + ' / ' + el.length + ' 組</div>' +
+    (refund > 0 ? '<div class="num small" style="margin-top:6px">扣手續費後約拿回 <b>' + yen(net) + '</b> <span class="muted">（≈ ' + twd(C.toTWD(net, rt)) + '，手續費約 ' + yen(fee) + '，網友行情估算）</span></div>' : '') + '</div></div>';
   h += '<div class="note" style="margin-bottom:14px">新制：先付含稅價，出境時先到機場「海關確認」商品，確認後才退稅。商品要自己帶出境，退稅需在購買日起 ' + CFG.DEADLINE_DAYS + ' 天內完成出境；<b>金額以海關與退稅業者實際結算為準</b>。</div>';
   h += '<div class="btn-row" style="margin-bottom:12px"><button class="btn ' + (S.onlyEligible ? '' : 'line') + '" data-act="filter-eligible">' + (S.onlyEligible ? '顯示全部' : '只看可退稅') + '</button></div>';
   const gm = new Map(G.map(g => [g.key, g]));
   const sums = summarizeByCo(list, gm);
   if (sums.length) {
     h += '<div class="card" style="margin-bottom:12px"><div class="lab small muted" style="margin-bottom:6px">各退稅公司（預估退稅）</div>' +
-      sums.map(o => '<div class="row" style="margin-bottom:4px"><span>' + esc(o.co) + ' <span class="small muted">' + o.n + ' 張</span></span><span class="num"><b>' + yen(o.refund) + '</b> <span class="small muted">≈ ' + twd(C.toTWD(o.refund, rt)) + '</span></span></div>').join('') + '</div>';
+      sums.map(o => '<div class="row" style="margin-bottom:4px"><span>' + esc(o.co) + ' <span class="small muted">' + o.n + ' 張</span></span><span class="num"><b>' + yen(o.refund) + '</b> <span class="small muted">≈ ' + twd(C.toTWD(o.refund, rt)) + (o.refund > 0 ? '；扣費後約 ' + yen(Math.max(0, o.refund - o.fee)) : '') + '</span></span></div>').join('') + '</div>';
   }
   h += refundFilterBar(list);
   const hasCo = g => !S.refundFilter || g.receipts.some(matchCo);
@@ -647,20 +650,42 @@ function refundOptions(sel) {
 }
 
 /* 同一間店上次選過的退稅公司，下次選到這間店就自動帶入 */
-/* 各店常用的退稅公司（網友整理，僅供預設帶入，可自己改） */
-const STORE_CO = [
-  [/bic ?camera|ビック|山田|yamada|唐吉|donki|ドンキ|札幌|sapporo|sundrug|サンドラッグ|鶴羽|tsuruha|松本清|マツモト|東武|^gu$|ジーユー|uniqlo|ユニクロ|優衣庫/i, 'J&J Tax Free（J-TaxRefund）'],
-  [/edion|愛電王|エディオン|sugi|杉|大丸|daimaru|阪急|hankyu|阪神|hanshin/i, 'Global Blue'],
-  [/國民|kokumin|コクミン|阿卡將|akachan|アカチャン/i, 'Smart Detax（JP Refund）'],
-  [/三井|mitsui/i, 'PIE VAT']
+/* 各店常用的退稅公司與手續費（網友整理，僅供預設與估算，以現場為準）
+   fee: {p: 佔未稅價%, base:'incl' 則佔含稅價} 或 {fix: 每張固定日圓} */
+const CO_J = 'J&J Tax Free（J-TaxRefund）', CO_GB = 'Global Blue', CO_JP = 'Smart Detax（JP Refund）', CO_PIE = 'PIE VAT';
+const STORE_RULES = [
+  [/bic ?camera|ビック|山田|yamada|唐吉|donki|ドンキ|札幌|sapporo|sundrug|サンドラッグ|鶴羽|tsuruha|多慶屋|kojima|sofmap/i, CO_J, { p: 0 }],
+  [/松本清|マツモト|cocokara|ココカラ/i, CO_J, { p: 0.33 }],
+  [/東武|^gu$|ジーユー|uniqlo|ユニクロ|優衣庫/i, CO_J, { p: 1 }],
+  [/edion|愛電王|エディオン/i, CO_GB, { fix: 210 }],
+  [/sugi|スギ薬局|杉藥局/i, CO_GB, { p: 1.6 }],
+  [/大丸|daimaru|松坂屋|阪急|hankyu|阪神|hanshin/i, CO_GB, { p: 2.3 }],
+  [/國民|kokumin|コクミン/i, CO_JP, { p: 1.25 }],
+  [/阿卡將|akachan|アカチャン/i, CO_JP, { p: 1.1, base: 'incl' }],
+  [/3 ?coins|スリーコインズ/i, CO_JP, { fix: 320 }],
+  [/三井|mitsui|lalaport/i, CO_PIE, { p: 1.5 }]
 ];
-function defaultCoFor(store) {
+const CO_FEE = {}; CO_FEE[CO_J] = { p: 1 }; CO_FEE[CO_GB] = { p: 2.3 }; CO_FEE[CO_JP] = { p: 1.5 }; CO_FEE[CO_PIE] = { p: 1.5 };
+const FEE_GUESS = { p: 1.5 };
+function storeRule(store) {
   const n = String(store || '').trim();
-  for (let i = 0; i < STORE_CO.length; i++) {
-    if (STORE_CO[i][0].test(n)) return REFUND_COS.indexOf(STORE_CO[i][1]) >= 0 ? STORE_CO[i][1] : '';
-  }
-  return '';
+  for (let i = 0; i < STORE_RULES.length; i++) if (STORE_RULES[i][0].test(n)) return STORE_RULES[i];
+  return null;
 }
+function defaultCoFor(store) {
+  const r = storeRule(store);
+  return r && REFUND_COS.indexOf(r[1]) >= 0 ? r[1] : '';
+}
+/* 單張收據的預估手續費（日圓）：店家規則優先；沒規則就用退稅公司的一般行情 */
+function feeOf(r) {
+  const tax = Number(r.tax) || 0;
+  if (!(tax > 0) || r.consumed) return 0;
+  const sr = storeRule(r.store);
+  let f = sr && (!r.refundCo || r.refundCo === sr[1]) ? sr[2] : (CO_FEE[r.refundCo] || FEE_GUESS);
+  const v = f.fix != null ? f.fix : Math.round((f.base === 'incl' ? (Number(r.amountIncl) || 0) : (Number(r.amountExcl) || Number(r.amountIncl) - tax)) * f.p / 100);
+  return Math.min(tax, Math.max(0, v));
+}
+const feeOfGroups = G => G.filter(g => g.eligible).reduce((a, g) => a + g.receipts.reduce((b, r) => b + feeOf(r), 0), 0);
 function lastRefundFor(store) {
   if (!store) return '';
   const l = S.receipts.filter(r => r.store === store && r.refundCo).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
