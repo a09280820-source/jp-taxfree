@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -273,7 +273,7 @@ async function pullInit() {
 
 const pickFields = r => ({
   id: r.id, date: r.date, store: r.store, amountIncl: r.amountIncl, tax: r.tax, amountExcl: r.amountExcl,
-  rate: r.rate, note: r.note, packed: r.packed, needsReview: r.needsReview, createdAt: r.createdAt, refundCo: r.refundCo || '', consumed: !!r.consumed
+  rate: r.rate, note: r.note, packed: r.packed, needsReview: r.needsReview, createdAt: r.createdAt, refundCo: r.refundCo || '', consumed: !!r.consumed, proxy: !!r.proxy, proxyFor: r.proxyFor || ''
 });
 
 async function pushPending() {
@@ -402,17 +402,18 @@ function viewHome() {
   const list = scoped(), rt = rate();
   const G = C.groupReceipts(list, TH);
   const incl = sumBy(list, 'amountIncl');
+  const inclProxy = sumBy(list.filter(r => r.proxy), 'amountIncl');
   const refund = G.reduce((a, g) => a + g.refund, 0);
-  const fee = feeOfGroups(G), net = Math.max(0, refund - fee);
+  const fee = feeOfGroups(G), net = Math.max(0, refund - fee), rsp = refundSplit(G), netOwn = Math.max(0, rsp.own - feeOfGroups(G.map(g => Object.assign({}, g, { receipts: g.receipts.filter(r => !r.proxy) }))));
   const today = C.localDate();
   let h = '<div class="section"><div class="kpi">' +
-    '<div class="card"><div class="lab">總花費（含稅）</div><div class="big">' + yen(incl) + '</div><div class="sub">≈ ' + twd(C.toTWD(incl, rt)) + '</div></div>' +
-    '<div class="card refund"><div class="lab">預估退稅</div><div class="big">' + yen(refund) + '</div><div class="sub">≈ ' + twd(C.toTWD(refund, rt)) + '</div>' + (refund > 0 ? '<div class="sub">扣手續費後約 ' + yen(net) + '（估）</div>' : '') + '</div>' +
+    '<div class="card"><div class="lab">總花費（含稅）</div><div class="big">' + yen(incl) + '</div><div class="sub">≈ ' + twd(C.toTWD(incl, rt)) + '</div>' + (inclProxy > 0 ? '<div class="sub">其中代購 ' + yen(inclProxy) + '</div>' : '') + '</div>' +
+    '<div class="card refund"><div class="lab">預估退稅</div><div class="big">' + yen(refund) + '</div><div class="sub">≈ ' + twd(C.toTWD(refund, rt)) + '</div>' + (refund > 0 ? '<div class="sub">扣手續費後約 ' + yen(net) + '（估）</div>' : '') + (rsp.proxy > 0 ? '<div class="sub">不含代購：' + yen(rsp.own) + '（代購 ' + yen(rsp.proxy) + '）</div>' : '') + '</div>' +
     '</div></div>';
 
   if (S.scope === 'me') {
     const budget = S.user.budgetTWD || 0;
-    const spent = C.toTWD(incl, rt);
+    const spent = C.toTWD(incl - inclProxy, rt);
     const bs = C.budgetStatus(spent, budget);
     h += '<div class="section"><h2>預算</h2><div class="card">';
     if (bs.level === 'none') {
@@ -425,8 +426,8 @@ function viewHome() {
       h += '<div class="num"><b>' + twd(spent) + '</b> <span class="muted">/ ' + twd(budget) + '</span></div>' +
         '<div class="meter ' + (bs.level === 'ok' ? '' : bs.level) + '"><i style="width:' + pct + '%"></i></div>' +
         '<div class="small ' + (bs.level === 'over' ? '' : 'muted') + '" style="' + (bs.level === 'over' ? 'color:var(--red);font-weight:700' : '') + '">' + msg + '</div>' +
-        '<div class="small muted" style="margin-top:6px">不算退稅，還剩 <b>' + twd(Math.max(0, budget - spent)) + '</b></div>' +
-        '<div class="small muted" style="margin-top:2px">退稅拿回後（預估，已扣手續費），花費約 ' + twd(Math.max(0, spent - C.toTWD(net, rt))) + '，還剩 <b>' + twd(Math.max(0, budget - Math.max(0, spent - C.toTWD(net, rt)))) + '</b></div>';
+        (inclProxy > 0 ? '<div class="small muted" style="margin-top:6px">已排除代購 ' + yen(inclProxy) + '</div>' : '') + '<div class="small muted" style="margin-top:6px">不算退稅，還剩 <b>' + twd(Math.max(0, budget - spent)) + '</b></div>' +
+        '<div class="small muted" style="margin-top:2px">退稅拿回後（預估，已扣手續費），花費約 ' + twd(Math.max(0, spent - C.toTWD(netOwn, rt))) + '，還剩 <b>' + twd(Math.max(0, budget - Math.max(0, spent - C.toTWD(netOwn, rt)))) + '</b></div>';
     }
     h += '</div></div>';
   }
@@ -519,6 +520,7 @@ function viewReceipts() {
     else if (g) b += g.eligible ? '<span class="badge ok">可退稅</span>' : '<span class="badge warn">未達門檻</span>';
     if (r.refundCo) b += '<span class="badge">' + esc(r.refundCo.replace(/（.*）/, '')) + '</span>';
     if (r.consumed) b += '<span class="badge warn">馬上吃掉／使用</span>';
+    if (r.proxy) b += '<span class="badge">代購' + (r.proxyFor ? '：' + esc(r.proxyFor) : '') + '</span>';
     if (r.packed) b += '<span class="badge ok">已打包</span>';
     if (S.scope === 'all') b += '<span class="badge">' + esc(r.ownerName) + '</span>';
     h += '<button class="item" data-act="edit" data-id="' + esc(r.id) + '">' +
@@ -536,13 +538,13 @@ function viewTax() {
   const G = C.groupReceipts(list, TH);
   const el = G.filter(g => g.eligible);
   const refund = el.reduce((a, g) => a + g.refund, 0);
-  const fee = feeOfGroups(G), net = Math.max(0, refund - fee);
+  const fee = feeOfGroups(G), net = Math.max(0, refund - fee), rsp = refundSplit(G);
   const packed = el.filter(g => g.packedAll).length;
   const rt = rate(), today = C.localDate();
   let h = '<div class="section"><div class="card"><div class="lab small muted">預估退稅合計（未扣退稅業者手續費）</div>' +
     '<div class="num" style="font-size:24px;font-weight:700;color:var(--red)">' + yen(refund) + '</div>' +
     '<div class="num small muted">≈ ' + twd(C.toTWD(refund, rt)) + ' · 已打包 ' + packed + ' / ' + el.length + ' 組</div>' +
-    (refund > 0 ? '<div class="num small" style="margin-top:6px">扣手續費後約拿回 <b>' + yen(net) + '</b> <span class="muted">（≈ ' + twd(C.toTWD(net, rt)) + '，手續費約 ' + yen(fee) + '，網友行情估算）</span></div>' : '') + '</div></div>';
+    (refund > 0 ? '<div class="num small" style="margin-top:6px">扣手續費後約拿回 <b>' + yen(net) + '</b> <span class="muted">（≈ ' + twd(C.toTWD(net, rt)) + '，手續費約 ' + yen(fee) + '，網友行情估算）</span></div>' : '') + (rsp.proxy > 0 ? '<div class="num small" style="margin-top:4px">不含代購 <b>' + yen(rsp.own) + '</b> <span class="muted">／ 代購部分 ' + yen(rsp.proxy) + '</span></div>' : '') + '</div></div>';
   h += '<div class="note" style="margin-bottom:14px">新制：先付含稅價，出境時先到機場「海關確認」商品，確認後才退稅。商品要自己帶出境，退稅需在購買日起 ' + CFG.DEADLINE_DAYS + ' 天內完成出境；<b>金額以海關與退稅業者實際結算為準</b>。</div>';
   h += '<div class="btn-row" style="margin-bottom:12px"><button class="btn ' + (S.onlyEligible ? '' : 'line') + '" data-act="filter-eligible">' + (S.onlyEligible ? '顯示全部' : '只看可退稅') + '</button></div>';
   const gm = new Map(G.map(g => [g.key, g]));
@@ -685,6 +687,12 @@ function feeOf(r) {
   const v = f.fix != null ? f.fix : Math.round((f.base === 'incl' ? (Number(r.amountIncl) || 0) : (Number(r.amountExcl) || Number(r.amountIncl) - tax)) * f.p / 100);
   return Math.min(tax, Math.max(0, v));
 }
+/* 退稅拆成「全部」與「其中代購」 */
+function refundSplit(G) {
+  let all = 0, proxy = 0;
+  G.filter(g => g.eligible).forEach(g => g.receipts.forEach(r => { if (!r.consumed) { all += r.tax || 0; if (r.proxy) proxy += r.tax || 0; } }));
+  return { all, proxy, own: all - proxy };
+}
 const feeOfGroups = G => G.filter(g => g.eligible).reduce((a, g) => a + g.receipts.reduce((b, r) => b + feeOf(r), 0), 0);
 function lastRefundFor(store) {
   if (!store) return '';
@@ -737,6 +745,8 @@ function renderForm() {
     '<label class="check" style="margin:0 0 6px"><input id="fPacked" type="checkbox"' + (b.packed ? ' checked' : '') + ro + '> 已放進隨身行李</label>' +
     '<label class="check" style="margin:0 0 2px"><input id="fConsumed" type="checkbox"' + (b.consumed ? ' checked' : '') + ro + '> 馬上吃掉／使用</label>' +
     '<p class="small muted" style="margin:0 0 14px 28px">食物、飲料、貼布、藥品、化妝品等在日本用掉的才勾；衣服穿著不用勾。勾了這張不計入退稅。</p>' +
+    '<label class="check" style="margin:0 0 6px"><input id="fProxy" type="checkbox"' + (b.proxy ? ' checked' : '') + ro + '> 代購（幫別人買）</label>' +
+    '<div class="field" id="fProxyWrap" style="' + (b.proxy ? '' : 'display:none') + '"><input id="fProxyFor" class="input" value="' + esc(b.proxyFor || '') + '" placeholder="幫誰買？例如：媽媽、同事小美"' + ro + '><p class="small muted" style="margin:4px 0 0">不算進我的預算；退稅照算，另外會分開顯示。</p></div>' +
     (F.readonly ? '<p class="muted small">這是別人的收據，只能查看。</p>' :
       '<button class="btn" data-act="save">儲存</button>' + (F.isNew ? '' : '<button class="btn ghost" style="color:var(--red)" data-act="delete">刪除這張收據</button>')) +
     '</div>');
@@ -774,7 +784,7 @@ function readForm() {
     tax = Math.max(0, Math.min(incl, Math.round(Number($('#fTax').value) || 0)));
     rate = incl - tax > 0 ? Math.round(tax / (incl - tax) * 100) : 10;
   } else { rate = Number(rs); tax = C.splitTax(incl, rate).tax; }
-  return { store, date: $('#fDate').value, incl, rate, rs, tax, excl: incl - tax, note: $('#fNote').value.trim(), packed: $('#fPacked').checked, consumed: $('#fConsumed') ? $('#fConsumed').checked : false, refundCo: $('#fRefund') ? $('#fRefund').value : '' };
+  return { store, date: $('#fDate').value, incl, rate, rs, tax, excl: incl - tax, note: $('#fNote').value.trim(), packed: $('#fPacked').checked, consumed: $('#fConsumed') ? $('#fConsumed').checked : false, refundCo: $('#fRefund') ? $('#fRefund').value : '', proxy: $('#fProxy') ? $('#fProxy').checked : false, proxyFor: $('#fProxyFor') ? $('#fProxyFor').value.trim() : '' };
 }
 
 function updateCalc() {
@@ -861,7 +871,7 @@ async function saveForm() {
   const rec = {
     id: F.id, owner: S.user.email, ownerName: S.user.name,
     date: f.date, store: f.store, amountIncl: f.incl, tax: f.tax, amountExcl: f.excl, rate: f.rate,
-    note: f.note, packed: f.packed, consumed: f.consumed, refundCo: f.refundCo, needsReview: f.incl === 0,
+    note: f.note, packed: f.packed, consumed: f.consumed, proxy: f.proxy, proxyFor: f.proxy ? f.proxyFor : '', refundCo: f.refundCo, needsReview: f.incl === 0,
     photoFileId: base ? base.photoFileId || '' : '',
     createdAt: base ? base.createdAt : Date.now(),
     sync: (!base || base.sync === 'add') ? 'add' : 'update'
@@ -984,14 +994,14 @@ function exportExcel(all) {
   const gm = new Map(G.map(g => [g.key, g]));
   const today = C.localDate();
 
-  const rows = [['購買日', '購買者', '店家', '含稅金額(JPY)', '消費稅(JPY)', '未稅金額(JPY)', '稅率(%)', '含稅金額(TWD)', '同店同日是否達門檻', '預估退稅(JPY)', '預估退稅(TWD)', '出境期限', '剩餘天數', '已打包', '備註', '收據照片連結', '退稅公司', '馬上吃掉／使用']];
+  const rows = [['購買日', '購買者', '店家', '含稅金額(JPY)', '消費稅(JPY)', '未稅金額(JPY)', '稅率(%)', '含稅金額(TWD)', '同店同日是否達門檻', '預估退稅(JPY)', '預估退稅(TWD)', '出境期限', '剩餘天數', '已打包', '備註', '收據照片連結', '退稅公司', '馬上吃掉／使用', '代購', '幫誰買']];
   list.forEach(r => {
     const g = gm.get(C.groupKey(r));
     const ok = g && g.eligible && !r.consumed;
     rows.push([r.date, r.ownerName, r.store, r.amountIncl, r.tax, r.amountExcl, r.rate, C.toTWD(r.amountIncl, rt),
       ok ? '是' : '否', ok ? r.tax : 0, ok ? C.toTWD(r.tax, rt) : 0,
       C.deadlineDate(r.date, CFG.DEADLINE_DAYS), C.daysLeft(r.date, today, CFG.DEADLINE_DAYS),
-      r.packed ? '是' : '否', r.note || '', r.photoFileId ? 'https://drive.google.com/file/d/' + r.photoFileId + '/view' : '', r.refundCo || '', r.consumed ? '是' : '否']);
+      r.packed ? '是' : '否', r.note || '', r.photoFileId ? 'https://drive.google.com/file/d/' + r.photoFileId + '/view' : '', r.refundCo || '', r.consumed ? '是' : '否', r.proxy ? '是' : '否', r.proxy ? (r.proxyFor || '') : '']);
   });
   const n = rows.length;
   rows.push(['合計', '', '', { f: 'SUM(D2:D' + n + ')' }, { f: 'SUM(E2:E' + n + ')' }, { f: 'SUM(F2:F' + n + ')' }, '', { f: 'SUM(H2:H' + n + ')' }, '', { f: 'SUM(J2:J' + n + ')' }, { f: 'SUM(K2:K' + n + ')' }]);
@@ -1148,6 +1158,7 @@ document.addEventListener('change', e => {
   else if (el.closest && el.closest('#modal')) {
     if (el.id === 'fRefund' && F) F.refundTouched = true;
     if (el.id === 'fStore' && F) autoRefund();
+    if (el.id === 'fProxy') { const w = $('#fProxyWrap'); if (w) w.style.display = el.checked ? '' : 'none'; }
     updateCalc();
   }
 });
