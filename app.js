@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.6.1';
+const VERSION = '1.6.2';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -429,11 +429,17 @@ function viewHome() {
         '<div class="meter ' + (bs.level === 'ok' ? '' : bs.level) + '"><i style="width:' + pct + '%"></i></div>' +
         (msg ? '<div class="small" style="' + (bs.level === 'over' ? 'color:var(--red);font-weight:700' : 'color:var(--muted)') + '">' + msg + '</div>' : '') +
         row('不算退稅，還剩', twd(left0)) +
-        row('退稅拿回後，還剩（估）', twd(left1)) +
-        '<div style="border-top:1px solid #E6EAEF;margin-top:10px;padding-top:8px">' +
-        row('代購總額', yen(inclProxy) + ' <span class="small muted">≈ ' + twd(C.toTWD(inclProxy, rt)) + '</span>') + '</div>';
+        row('退稅拿回後，還剩（估）', twd(left1));
     }
     h += '</div></div>';
+  }
+
+  if (inclProxy > 0) {
+    const nProxy = list.filter(r => r.proxy && r.amountIncl > 0).length;
+    const prow = (k, v) => '<div class="row" style="margin-top:6px;gap:12px"><span class="small muted">' + k + '</span><span class="num"><b>' + v + '</b></span></div>';
+    h += '<div class="section"><h2>代購</h2><div class="card">' +
+      prow('代購總額（' + nProxy + ' 張）', yen(inclProxy) + ' <span class="small muted">≈ ' + twd(C.toTWD(inclProxy, rt)) + '</span>') +
+      prow('這些的預估退稅', yen(rsp.proxy)) + '</div></div>';
   }
 
   const alerts = [];
