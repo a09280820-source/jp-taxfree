@@ -649,7 +649,7 @@ function refundOptions(sel) {
 /* 同一間店上次選過的退稅公司，下次選到這間店就自動帶入 */
 /* 各店常用的退稅公司（網友整理，僅供預設帶入，可自己改） */
 const STORE_CO = [
-  [/bic ?camera|ビック|山田|yamada|唐吉|donki|ドンキ|札幌|sapporo|sundrug|サンドラッグ|鶴羽|tsuruha|松本清|マツモト|東武|^gu$|ジーユー/i, 'J&J Tax Free（J-TaxRefund）'],
+  [/bic ?camera|ビック|山田|yamada|唐吉|donki|ドンキ|札幌|sapporo|sundrug|サンドラッグ|鶴羽|tsuruha|松本清|マツモト|東武|^gu$|ジーユー|uniqlo|ユニクロ|優衣庫/i, 'J&J Tax Free（J-TaxRefund）'],
   [/edion|愛電王|エディオン|sugi|杉|大丸|daimaru|阪急|hankyu|阪神|hanshin/i, 'Global Blue'],
   [/國民|kokumin|コクミン|阿卡將|akachan|アカチャン/i, 'Smart Detax（JP Refund）'],
   [/三井|mitsui/i, 'PIE VAT']
