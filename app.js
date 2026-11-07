@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.6.4';
+const VERSION = '1.6.5';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -754,7 +754,7 @@ function renderForm() {
     '<div class="field"><label>備註</label><input id="fNote" class="input" value="' + esc(b.note || '') + '" placeholder="例如：化妝水、零食"' + ro + '></div>' +
     '<label class="check" style="margin:0 0 6px"><input id="fPacked" type="checkbox"' + (b.packed ? ' checked' : '') + ro + '> 已放進隨身行李</label>' +
     '<label class="check" style="margin:0 0 2px"><input id="fConsumed" type="checkbox"' + (b.consumed ? ' checked' : '') + ro + '> 馬上吃掉／使用</label>' +
-    '<p class="small muted" style="margin:0 0 14px 28px">食物、飲料、貼布、藥品、化妝品等在日本用掉的才勾；衣服穿著不用勾。勾了這張不計入退稅。</p>' +
+    '<p class="small muted" style="margin:0 0 14px 28px">食物、飲料、貼布、藥品、化妝品等在日本拆封或用掉的才勾；衣服穿著不用勾。要馬上用的，結帳請分開收據。</p>' +
     '<label class="check" style="margin:0 0 6px"><input id="fProxy" type="checkbox"' + (b.proxy ? ' checked' : '') + ro + '> 代購（幫別人買）</label>' +
     '<div class="field" id="fProxyWrap" style="' + (b.proxy ? '' : 'display:none') + '"><input id="fProxyFor" class="input" value="' + esc(b.proxyFor || '') + '" placeholder="幫誰買？例如：媽媽、同事小美"' + ro + '><p class="small muted" style="margin:4px 0 0">不計入預算，退稅照算</p></div>' +
     (F.readonly ? '<p class="muted small">這是別人的收據，只能查看。</p>' :
