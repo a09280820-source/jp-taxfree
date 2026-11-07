@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.6.3';
+const VERSION = '1.6.4';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -216,7 +216,7 @@ async function firstLogin() {
 }
 function showRelogin() {
   openModal('<div class="sheet"><div class="sheet-head"><h2>重新登入</h2><button class="x" data-act="close-modal">×</button></div>' +
-    '<p class="muted small" style="margin-bottom:14px">登入已過期。重新登入後會自動補上傳，待上傳的收據不會消失。</p><div id="gbtn2"></div></div>');
+    '<p class="muted small" style="margin-bottom:14px">登入已過期，請重新登入（待上傳的收據不會消失）</p><div id="gbtn2"></div></div>');
   initGsi().then(ok => {
     if (ok) google.accounts.id.renderButton($('#gbtn2'), { theme: 'outline', size: 'large', text: 'signin_with', locale: 'zh-TW', width: 280 });
   });
@@ -308,7 +308,7 @@ async function pushPending() {
 
 async function sync(manual) {
   if (S.syncing || !S.user) return;
-  if (!navigator.onLine) { if (manual) toast('目前離線，連上網路後會自動上傳'); return; }
+  if (!navigator.onLine) { if (manual) toast('離線中，連線後自動上傳'); return; }
   if (configMissing()) return;
   S.syncing = true; renderChrome();
   try {
@@ -408,7 +408,7 @@ function viewHome() {
   const today = C.localDate();
   let h = '<div class="section"><div class="kpi">' +
     '<div class="card"><div class="lab">總花費（含稅）</div><div class="big">' + yen(incl) + '</div><div class="sub">≈ ' + twd(C.toTWD(incl, rt)) + '</div>' + '</div>' +
-    '<div class="card refund"><div class="lab">預估退稅</div><div class="big">' + yen(refund) + '</div><div class="sub">≈ ' + twd(C.toTWD(refund, rt)) + '</div>' + (refund > 0 ? '<div class="sub">扣手續費後約 ' + yen(net) + '（估）</div>' : '') + (rsp.proxy > 0 ? '<div class="sub">不含代購 ' + yen(rsp.own) + '</div><div class="sub">代購 ' + yen(rsp.proxy) + '</div>' : '') + '</div>' +
+    '<div class="card refund"><div class="lab">預估退稅</div><div class="big">' + yen(refund) + '</div><div class="sub">≈ ' + twd(C.toTWD(refund, rt)) + '</div>' + (refund > 0 ? '<div class="sub">實拿約 ' + yen(net) + '（估）</div>' : '') + (rsp.proxy > 0 ? '<div class="sub">不含代購 ' + yen(rsp.own) + '</div><div class="sub">代購 ' + yen(rsp.proxy) + '</div>' : '') + '</div>' +
     '</div></div>';
 
   if (S.scope === 'me') {
@@ -428,8 +428,8 @@ function viewHome() {
       h += '<div class="num"><b>' + twd(spent) + '</b> <span class="muted">/ ' + twd(budget) + '</span></div>' +
         '<div class="meter ' + (bs.level === 'ok' ? '' : bs.level) + '"><i style="width:' + pct + '%"></i></div>' +
         (msg ? '<div class="small" style="' + (bs.level === 'over' ? 'color:var(--red);font-weight:700' : 'color:var(--muted)') + '">' + msg + '</div>' : '') +
-        row('還剩', twd(left0)) +
-        row('退稅後', twd(left1));
+        row('剩餘', twd(left0)) +
+        row('退稅後（估）', twd(left1));
     }
     h += '</div></div>';
   }
@@ -438,8 +438,8 @@ function viewHome() {
     const nProxy = list.filter(r => r.proxy && r.amountIncl > 0).length;
     const prow = (k, v) => '<div class="row" style="margin-top:6px;gap:12px"><span class="small muted">' + k + '</span><span class="num"><b>' + v + '</b></span></div>';
     h += '<div class="section"><h2>代購</h2><div class="card">' +
-      prow('代購總額（' + nProxy + ' 張）', yen(inclProxy) + ' <span class="small muted">≈ ' + twd(C.toTWD(inclProxy, rt)) + '</span>') +
-      prow('這些的預估退稅', yen(rsp.proxy)) + '</div></div>';
+      prow('總額（' + nProxy + ' 張）', yen(inclProxy) + ' <span class="small muted">≈ ' + twd(C.toTWD(inclProxy, rt)) + '</span>') +
+      prow('退稅（估）', yen(rsp.proxy)) + '</div></div>';
   }
 
   const alerts = [];
@@ -451,14 +451,14 @@ function viewHome() {
   const toCheck = list.filter(r => !isDraft(r) && r.needsReview && r.amountIncl > 0).length;
   if (nDraft) alerts.push('<div class="alert bad">有 <b>' + nDraft + '</b> 張照片還沒 AI 辨識</div>');
   if (noAmt) alerts.push('<div class="alert bad">有 <b>' + noAmt + '</b> 張收據還沒補金額</div>');
-  if (toCheck) alerts.push('<div class="alert bad">有 <b>' + toCheck + '</b> 張 AI 填寫的收據待核對（點開確認後按儲存）</div>');
+  if (toCheck) alerts.push('<div class="alert bad">有 <b>' + toCheck + '</b> 張待核對</div>');
   const unpacked = G.filter(g => g.eligible && !g.packedAll).length;
-  if (unpacked) alerts.push('<div class="alert">有 <b>' + unpacked + '</b> 組已達標、還沒勾「已打包」</div>');
+  if (unpacked) alerts.push('<div class="alert">有 <b>' + unpacked + '</b> 組已達標，尚未打包</div>');
   G.filter(g => g.eligible).forEach(g => {
     const d = C.daysLeft(g.date, today, CFG.DEADLINE_DAYS);
     if (d <= 14) alerts.push('<div class="alert ' + (d <= 7 ? 'bad' : 'warn') + '"><b>' + esc(g.store) + '</b>（' + esc(g.date) + '）' + (d < 0 ? '已超過出境期限' : '要在 ' + d + ' 天內出境') + '</div>');
   });
-  h += '<div class="section"><h2>提醒</h2>' + (alerts.length ? alerts.join('') : '<p class="muted">目前沒有需要處理的事項。</p>') + '</div>';
+  h += '<div class="section"><h2>提醒</h2>' + (alerts.length ? alerts.join('') : '<p class="muted">沒有待辦</p>') + '</div>';
   h += '<p class="small muted">1 日圓 ＝ ' + rt.toFixed(4) + ' 台幣 · ' + esc(rateNote()) + '</p>';
   return h;
 }
@@ -497,7 +497,7 @@ function summarizeByCo(list, gm) {
   return Array.from(m.values()).sort((a, b) => coOrder(a.co, b.co));
 }
 function coSummaryLine(o, rt) {
-  return o.n + ' 張 · 含稅 ' + yen(o.incl) + ' · 預估退稅 ' + yen(o.refund) + '（≈ ' + twd(C.toTWD(o.refund, rt)) + '）' + (o.refund > 0 ? ' · 扣手續費後約 ' + yen(Math.max(0, o.refund - o.fee)) : '');
+  return o.n + ' 張 · 含稅 ' + yen(o.incl) + ' · 預估退稅 ' + yen(o.refund) + '（≈ ' + twd(C.toTWD(o.refund, rt)) + '）' + (o.refund > 0 ? ' · 實拿約 ' + yen(Math.max(0, o.refund - o.fee)) : '');
 }
 
 /* ----- 收據 ----- */
@@ -510,7 +510,7 @@ function viewReceipts() {
   const rt = rate();
   const nd = all.filter(isDraft).length;
   let h = '<button class="btn line" style="margin-bottom:10px" data-act="multi">一次選多張照片</button>';
-  if (nd) h += '<div class="note" style="margin-bottom:10px"><b>' + nd + '</b> 張照片還沒辨識：可以點開單張自動辨識，或一鍵依序辨識全部（一次一張）。核對後再按儲存。</div>' +
+  if (nd) h += '<div class="note" style="margin-bottom:10px"><b>' + nd + '</b> 張待辨識。點開單張，或按下面一次辨識全部。</div>' +
     '<button id="batchBtn" class="btn" style="margin-bottom:10px" data-act="batch-ocr">' + (S.batchBusy ? '辨識中…' : '一鍵辨識全部待辨識（' + nd + ' 張）') + '</button>';
   h += refundFilterBar(all);
   if (S.refundFilter) {
@@ -551,17 +551,17 @@ function viewTax() {
   const fee = feeOfGroups(G), net = Math.max(0, refund - fee), rsp = refundSplit(G);
   const packed = el.filter(g => g.packedAll).length;
   const rt = rate(), today = C.localDate();
-  let h = '<div class="section"><div class="card"><div class="lab small muted">預估退稅合計（未扣退稅業者手續費）</div>' +
+  let h = '<div class="section"><div class="card"><div class="lab small muted">預估退稅合計</div>' +
     '<div class="num" style="font-size:24px;font-weight:700;color:var(--red)">' + yen(refund) + '</div>' +
     '<div class="num small muted">≈ ' + twd(C.toTWD(refund, rt)) + ' · 已打包 ' + packed + ' / ' + el.length + ' 組</div>' +
-    (refund > 0 ? '<div class="num small" style="margin-top:6px">扣手續費後約拿回 <b>' + yen(net) + '</b> <span class="muted">（≈ ' + twd(C.toTWD(net, rt)) + '，手續費約 ' + yen(fee) + '，網友行情估算）</span></div>' : '') + (rsp.proxy > 0 ? '<div class="num small" style="margin-top:4px">不含代購 <b>' + yen(rsp.own) + '</b> <span class="muted">／ 代購部分 ' + yen(rsp.proxy) + '</span></div>' : '') + '</div></div>';
-  h += '<div class="note" style="margin-bottom:14px">新制：先付含稅價，出境時先到機場「海關確認」商品，確認後才退稅。商品要自己帶出境，退稅需在購買日起 ' + CFG.DEADLINE_DAYS + ' 天內完成出境；<b>金額以海關與退稅業者實際結算為準</b>。</div>';
+    (refund > 0 ? '<div class="num small" style="margin-top:6px">實拿約 <b>' + yen(net) + '</b> <span class="muted">（≈ ' + twd(C.toTWD(net, rt)) + '，手續費約 ' + yen(fee) + '，網友行情估算）</span></div>' : '') + (rsp.proxy > 0 ? '<div class="num small" style="margin-top:4px">不含代購 <b>' + yen(rsp.own) + '</b> <span class="muted">／ 代購部分 ' + yen(rsp.proxy) + '</span></div>' : '') + '</div></div>';
+  h += '<div class="note" style="margin-bottom:14px">新制三步：① 先付含稅價 ② 出境前到機場海關確認 ③ 購買日起 ' + CFG.DEADLINE_DAYS + ' 天內出境。<br><b>金額以實際結算為準。</b></div>';
   h += '<div class="btn-row" style="margin-bottom:12px"><button class="btn ' + (S.onlyEligible ? '' : 'line') + '" data-act="filter-eligible">' + (S.onlyEligible ? '顯示全部' : '只看可退稅') + '</button></div>';
   const gm = new Map(G.map(g => [g.key, g]));
   const sums = summarizeByCo(list, gm);
   if (sums.length) {
     h += '<div class="card" style="margin-bottom:12px"><div class="lab small muted" style="margin-bottom:6px">各退稅公司（預估退稅）</div>' +
-      sums.map(o => '<div class="row" style="margin-bottom:4px"><span>' + esc(o.co) + ' <span class="small muted">' + o.n + ' 張</span></span><span class="num"><b>' + yen(o.refund) + '</b> <span class="small muted">≈ ' + twd(C.toTWD(o.refund, rt)) + (o.refund > 0 ? '；扣費後約 ' + yen(Math.max(0, o.refund - o.fee)) : '') + '</span></span></div>').join('') + '</div>';
+      sums.map(o => '<div class="row" style="margin-bottom:4px"><span>' + esc(o.co) + ' <span class="small muted">' + o.n + ' 張</span></span><span class="num"><b>' + yen(o.refund) + '</b> <span class="small muted">≈ ' + twd(C.toTWD(o.refund, rt)) + (o.refund > 0 ? '；實拿約 ' + yen(Math.max(0, o.refund - o.fee)) : '') + '</span></span></div>').join('') + '</div>';
   }
   h += refundFilterBar(list);
   const hasCo = g => !S.refundFilter || g.receipts.some(matchCo);
@@ -655,7 +655,7 @@ async function fetchRemotePhoto(id) {
 }
 
 function refundOptions(sel) {
-  let h = '<option value="">選擇退稅公司…</option>';
+  let h = '<option value="">選擇（看收據 QR Code）</option>';
   REFUND_COS.forEach(c => { h += '<option value="' + esc(c) + '"' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>'; });
   if (sel && REFUND_COS.indexOf(sel) < 0) h += '<option value="' + esc(sel) + '" selected>' + esc(sel) + '</option>';
   return h;
@@ -745,7 +745,7 @@ function renderForm() {
     '<div id="ocrWrap" style="margin-bottom:12px"></div>' +
     '<div class="field"><label>店家</label><select id="fStore" class="select"' + ro + '>' + storeOptions(selVal) + '</select>' +
     '<input id="fStoreOther" class="input" style="margin-top:6px" placeholder="輸入店名" value="' + esc(inList ? '' : (b.store || '')) + '"' + (selVal === '__other' ? '' : ' hidden') + ro + '></div>' +
-    '<div class="field"><label>退稅公司（收據上的 QR Code 屬於哪一家）</label><select id="fRefund" class="select"' + ro + '>' + refundOptions(b.refundCo || '') + '</select></div>' +
+    '<div class="field"><label>退稅公司</label><select id="fRefund" class="select"' + ro + '>' + refundOptions(b.refundCo || '') + '</select></div>' +
     '<div class="two"><div class="field"><label>購買日</label><input id="fDate" class="input" type="date" value="' + esc(b.date || C.localDate()) + '"' + ro + '></div>' +
     '<div class="field"><label>含稅金額（日圓）</label><input id="fIncl" class="input num" type="number" inputmode="numeric" value="' + esc(incl) + '" placeholder="收據上的合計"' + ro + '></div></div>' +
     '<div class="two"><div class="field"><label>稅率</label><select id="fRate" class="select"' + ro + '><option value="10"' + (rateSel === '10' ? ' selected' : '') + '>10%（一般商品）</option><option value="8"' + (rateSel === '8' ? ' selected' : '') + '>8%（食品、飲料）</option><option value="x"' + (rateSel === 'x' ? ' selected' : '') + '>混合／自填稅額</option></select></div>' +
@@ -756,7 +756,7 @@ function renderForm() {
     '<label class="check" style="margin:0 0 2px"><input id="fConsumed" type="checkbox"' + (b.consumed ? ' checked' : '') + ro + '> 馬上吃掉／使用</label>' +
     '<p class="small muted" style="margin:0 0 14px 28px">食物、飲料、貼布、藥品、化妝品等在日本用掉的才勾；衣服穿著不用勾。勾了這張不計入退稅。</p>' +
     '<label class="check" style="margin:0 0 6px"><input id="fProxy" type="checkbox"' + (b.proxy ? ' checked' : '') + ro + '> 代購（幫別人買）</label>' +
-    '<div class="field" id="fProxyWrap" style="' + (b.proxy ? '' : 'display:none') + '"><input id="fProxyFor" class="input" value="' + esc(b.proxyFor || '') + '" placeholder="幫誰買？例如：媽媽、同事小美"' + ro + '><p class="small muted" style="margin:4px 0 0">不算進我的預算；退稅照算，另外會分開顯示。</p></div>' +
+    '<div class="field" id="fProxyWrap" style="' + (b.proxy ? '' : 'display:none') + '"><input id="fProxyFor" class="input" value="' + esc(b.proxyFor || '') + '" placeholder="幫誰買？例如：媽媽、同事小美"' + ro + '><p class="small muted" style="margin:4px 0 0">不計入預算，退稅照算</p></div>' +
     (F.readonly ? '<p class="muted small">這是別人的收據，只能查看。</p>' :
       '<button class="btn" data-act="save">儲存</button>' + (F.isNew ? '' : '<button class="btn ghost" style="color:var(--red)" data-act="delete">刪除這張收據</button>')) +
     '</div>');
@@ -804,7 +804,7 @@ function updateCalc() {
   if (f.rs !== 'x') $('#fTax').value = f.incl ? f.tax : '';
   $('#fStoreOther').hidden = $('#fStore').value !== '__other';
   let h;
-  if (!f.incl) h = '<span class="muted">輸入金額後，這裡會顯示未稅金額與退稅門檻。</span>';
+  if (!f.incl) h = '<span class="muted">輸入金額後顯示試算</span>';
   else {
     h = '<div class="l"><span>含稅</span><span class="num">' + yen(f.incl) + '（≈ ' + twd(C.toTWD(f.incl, rt)) + '）</span></div>' +
       '<div class="l"><span>消費稅</span><span class="num">' + yen(f.tax) + '</span></div>' +
@@ -832,13 +832,13 @@ async function handlePhoto(file) {
     F.photoBlob = blob; F.photoUrl = URL.createObjectURL(blob); F.photoNew = true;
     setPhotoBox();
     if (navigator.onLine && F.isNew && !configMissing()) runOcr();
-    else if (!navigator.onLine) toast('離線中：先存照片，連網後可按「AI 辨識」');
+    else if (!navigator.onLine) toast('離線中，已先存照片，連線後再辨識');
   } catch (e) { toast('照片處理失敗，請再試一次'); }
 }
 
 async function runOcr() {
   if (!F || !F.photoBlob) return;
-  if (!navigator.onLine) { toast('離線中，連上網路後再按「AI 辨識」'); return; }
+  if (!navigator.onLine) { toast('離線中，連線後再辨識'); return; }
   const btn = $('#ocrBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>辨識中…'; }
   try {
@@ -946,7 +946,7 @@ async function handleMulti(files) {
 /* ========== 一鍵依序辨識所有草稿（一次一張，不會同時呼叫） ========== */
 async function batchOcr() {
   if (S.batchBusy) return;
-  if (!navigator.onLine) { toast('離線中，連上網路後再辨識'); return; }
+  if (!navigator.onLine) { toast('離線中，連線後再辨識'); return; }
   if (configMissing()) return;
   const drafts = scoped().filter(r => isDraft(r) && r.owner === S.user.email);
   if (!drafts.length) { toast('沒有待辨識的照片'); return; }
@@ -1054,7 +1054,7 @@ function exportExcel(all) {
 
   const rows4 = [['說明'], ['匯出時間', new Date().toLocaleString('zh-TW', { hour12: false })], ['換算匯率', '1 日圓 = ' + rt.toFixed(4) + ' 台幣（' + rateNote() + '）'],
     ['退稅門檻', '同一人、同一店、同一天，未稅合計達 ' + TH.toLocaleString('en-US') + ' 日圓'],
-    ['出境期限', '購買日起 ' + CFG.DEADLINE_DAYS + ' 天'], ['注意', '預估退稅未扣退稅業者手續費，實際金額以海關確認與退稅業者結算為準']];
+    ['出境期限', '購買日起 ' + CFG.DEADLINE_DAYS + ' 天'], ['注意', '預估值，實際金額以海關確認與退稅業者結算為準']];
   const ws4 = XLSX.utils.aoa_to_sheet(rows4);
   ws4['!cols'] = [{ wch: 12 }, { wch: 70 }];
 
