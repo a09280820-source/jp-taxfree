@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.6.2';
+const VERSION = '1.6.3';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -425,11 +425,11 @@ function viewHome() {
       const left0 = Math.max(0, budget - spent);
       const left1 = Math.max(0, budget - Math.max(0, spent - C.toTWD(netOwn, rt)));
       const row = (k, v) => '<div class="row" style="margin-top:6px;gap:12px"><span class="small muted">' + k + '</span><span class="num"><b>' + v + '</b></span></div>';
-      h += '<div class="num"><b>' + twd(spent) + '</b> <span class="muted">/ ' + twd(budget) + '</span> <span class="small muted">（不含代購）</span></div>' +
+      h += '<div class="num"><b>' + twd(spent) + '</b> <span class="muted">/ ' + twd(budget) + '</span></div>' +
         '<div class="meter ' + (bs.level === 'ok' ? '' : bs.level) + '"><i style="width:' + pct + '%"></i></div>' +
         (msg ? '<div class="small" style="' + (bs.level === 'over' ? 'color:var(--red);font-weight:700' : 'color:var(--muted)') + '">' + msg + '</div>' : '') +
-        row('不算退稅，還剩', twd(left0)) +
-        row('退稅拿回後，還剩（估）', twd(left1));
+        row('還剩', twd(left0)) +
+        row('退稅後', twd(left1));
     }
     h += '</div></div>';
   }
