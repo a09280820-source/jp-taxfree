@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.6.5';
+const VERSION = '1.7.0';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -380,7 +380,7 @@ function render() {
   renderChrome();
   const ae = document.activeElement;
   if (ae && ae.closest && ae.closest('#view') && /INPUT|SELECT|TEXTAREA/.test(ae.tagName)) return;
-  $('#view').innerHTML = ({ home: viewHome, receipts: viewReceipts, tax: viewTax, settings: viewSettings })[S.view]();
+  $('#view').innerHTML = ({ home: viewHome, receipts: viewReceipts, tax: viewTax, coupons: viewCoupons, settings: viewSettings })[S.view]();
   hydrateThumbs();
 }
 
@@ -1098,9 +1098,64 @@ async function importBackup(file) {
   } catch (e) { toast('備份檔格式不正確'); }
 }
 
+/* ----- 優惠券 ----- */
+// 圖片放在 coupons/ 資料夾；新增優惠券：加一筆資料 + 放圖片（xxx.jpg、xxx-t.jpg）
+const COUPONS = [
+  { id: 'alpen', name: 'Alpen／SPORTS DEPO／GOLF5', off: '5% OFF（全店）', exp: '2026-12-31', info: '運動用品。免稅需滿 ¥5,500（含稅）。不可與其他折扣併用。', must: '' },
+  { id: 'cosmos', name: 'COSMOS 科摩思', off: '免稅＋5／7／9%', exp: '2026-12-31', info: '滿 ¥1萬／3萬／5萬（不含稅）。僅圖上 5 間指定店可用，每天限用一次。', must: '' },
+  { id: 'snowpeak', name: 'Snow Peak', off: '退稅＋最大 7%', exp: '2027-03-31', info: '滿 ¥1萬送禮品；滿 3萬 5%；滿 5萬 7%。依金額掃對應那一條。需護照。', must: '依消費金額，掃對應的那一條條碼' },
+  { id: 'keio', name: '京王百貨 新宿店', off: '5% OFF', exp: '2027-03-31', info: '滿 ¥3,000（不含稅）。限訪日旅客。結帳時出示，優待番號 76－110。', must: '' },
+  { id: 'matsumoto', name: '松本清', off: '3／5／7%', exp: '2027-03-31', info: '滿 ¥1–3萬 3%、3–5萬 5%、5萬以上 7%。停留日本期間有效，可能不預告終止。', must: '' },
+  { id: 'cocokara', name: 'Cocokara Fine', off: '3／5／7%', exp: '2027-03-31', info: '滿 ¥1–3萬 3%、3–5萬 5%、5萬以上 7%。一天上限 ¥50萬。', must: '' },
+  { id: 'sapporo', name: '札幌藥妝', off: '免稅＋5%／7%', exp: null, info: '5%：一般金額；7%：滿 ¥38,888（不含稅）。券上未標示期限。', must: '' },
+  { id: 'drug11', name: 'Drug Eleven', off: '3／5／7%', exp: '2027-02-28', info: '滿 ¥1–3萬 3%、3–5萬 5%、5萬以上 7%。石垣島四家門市、國際通店、福岡縣免稅店。', must: '' },
+  { id: 'sugi', name: '杉藥局 Sugi', off: '14／16／18%', exp: '2027-02-28', info: '含免稅 10%。滿 ¥1–3萬 14%、3–5萬 16%、5萬以上 18%。免稅結帳時才能用。', must: '' },
+  { id: 'yamada', name: '山田電機 YAMADA', off: '免稅 10%＋7% OFF', exp: '2027-03-31', info: '每次結帳限一張。折扣後須滿 ¥5,000（未稅）才能免稅。', must: '' },
+  { id: 'biccamera', name: 'BicCamera／Kojima', off: '5%日用品／7%家電／3%清酒', exp: '2027-04-30', info: '折扣後滿 ¥5,000。免稅結帳時才能用。', must: '①、② 兩條條碼都要掃' },
+  { id: 'daimaru', name: '大丸／松坂屋百貨', off: '退稅＋5% OFF＋美食券', exp: '2027-08-31', info: '滿 ¥3,000。需護照。食品、餐廳、咖啡廳除外。', must: '' },
+  { id: 'tsuruha', name: '鶴羽藥妝 Tsuruha', off: '免稅 10%＋3／5／7%', exp: '2027-12-31', info: '滿 ¥1–3萬 3%、3–5萬 5%、5萬以上 7%。結帳前出示，結帳後不能補折。', must: '' },
+  { id: 'sundrug', name: 'Sundrug 尚都樂客', off: '3／5／7%', exp: null, info: '滿 ¥1萬 3%、3萬 5%、5萬 7%。券上未標示期限。', must: '' },
+  { id: 'kokumin', name: '國民藥妝 Kokumin', off: '5%／8%', exp: '2027-12-31', info: '滿 ¥1–3萬 5%、3萬以上 8%。Welcia 不適用。', must: '' },
+  { id: 'edion', name: 'EDION 愛電王', off: '7%家電 或 5%食品藥妝', exp: '2027-12-31', info: '二選一。', must: '①、② 兩條條碼都要掃' }
+];
+function couponState(c) {
+  if (!c.exp) return { cls: '', txt: '未標示期限', days: 99999, gone: false };
+  const end = new Date(c.exp + 'T23:59:59'), d = Math.ceil((end - Date.now()) / 864e5);
+  const t = c.exp.replace(/-/g, '/');
+  if (d < 0) return { cls: 'gone', txt: '已過期 ' + t, days: d, gone: true };
+  if (d <= 30) return { cls: 'soon', txt: '剩 ' + d + ' 天 · ' + t, days: d, gone: false };
+  return { cls: '', txt: '到 ' + t, days: d, gone: false };
+}
+function viewCoupons() {
+  const used = S.cu || {};
+  const list = COUPONS.map(c => ({ c, st: couponState(c) })).sort((a, b) => (a.st.gone - b.st.gone) || (!!used[a.c.id] - !!used[b.c.id]) || (a.st.days - b.st.days));
+  let h = '<section class="section"><h2>優惠券 <span class="small muted">' + COUPONS.length + ' 張</span></h2>' +
+    '<p class="small muted" style="margin-bottom:10px">點圖放大，結帳時給店員掃條碼。先把螢幕調亮。到期近的排前面。</p>';
+  list.forEach(({ c, st }) => {
+    const u = !!used[c.id];
+    h += '<div class="card cp' + (st.gone ? ' gone' : '') + (u ? ' used' : '') + '" data-act="coupon" data-id="' + c.id + '">' +
+      '<div class="cp-img" style="background-image:url(coupons/' + c.id + '-t.jpg)"></div>' +
+      '<div class="cp-body"><div class="cp-name">' + esc(c.name) + '</div><div class="cp-off">' + esc(c.off) + '</div>' +
+      '<div class="cp-exp ' + st.cls + '">' + st.txt + '</div>' + (u ? '<div class="small muted">✓ 已用過</div>' : '') + '</div></div>';
+  });
+  return h + '</section>';
+}
+function openCoupon(id) {
+  const c = COUPONS.find(x => x.id === id); if (!c) return;
+  const st = couponState(c), u = !!(S.cu || {})[id];
+  openModal('<div class="sheet"><div class="sheet-head"><h2>' + esc(c.name) + '</h2><button class="x" data-act="close-modal">×</button></div>' +
+    '<p><b>' + esc(c.off) + '</b> · <span class="cp-exp ' + st.cls + '">' + st.txt + '</span></p>' +
+    '<p class="small" style="margin:6px 0">' + esc(c.info) + '</p>' +
+    (c.must ? '<p class="small" style="color:var(--red);font-weight:700">⚠ ' + esc(c.must) + '</p>' : '') +
+    '<img class="cp-full" src="coupons/' + c.id + '.jpg" alt="' + esc(c.name) + '優惠券">' +
+    '<p style="margin-top:12px"><button class="btn line" data-act="coupon-used" data-id="' + id + '">' + (u ? '取消「已用過」' : '標記「已用過」') + '</button></p></div>');
+}
+
 /* ========== 事件 ========== */
 const handlers = {
   tab(el) { S.view = el.dataset.v; render(); window.scrollTo(0, 0); },
+  coupon(el) { openCoupon(el.dataset.id); },
+  async 'coupon-used'(el) { S.cu = S.cu || {}; const id = el.dataset.id; if (S.cu[id]) delete S.cu[id]; else S.cu[id] = 1; await kvSet('couponUsed', S.cu); closeModal(); render(); },
   scope(el) { S.scope = el.dataset.v; kvSet('scope', S.scope); render(true); },
   sync() { sync(true); },
   new() { openReceipt(null); },
@@ -1198,6 +1253,7 @@ async function boot() {
     S.receipts = await allReceipts();
     S.token = token || null; S.budgetDirty = !!bd; S.stores = stores || []; S.users = users || [];
     if (scope) S.scope = scope;
+    S.cu = (await kvGet('couponUsed')) || {};
     if (user) {
       S.user = user;
       showApp();
