@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.9.0';
+const VERSION = '1.9.1';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -469,6 +469,31 @@ function viewHome() {
 const fxOf = r => (Number(r.fx) > 0 ? Number(r.fx) : rate());
 const twdSum = (list, f) => list.reduce((a, r) => a + (f ? f(r) : r.amountIncl) * fxOf(r), 0);
 const avgFx = list => { const t = list.reduce((a, r) => a + (r.amountIncl || 0), 0); return t > 0 ? twdSum(list) / t : rate(); };
+/* 購買日當天的匯率（歷史匯率，查不到就回 0） */
+async function fxForDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return 0;
+  if (date >= C.localDate()) return rate();
+  const c = (await kvGet('fxCache')) || {};
+  if (c[date]) return c[date];
+  if (!navigator.onLine) return 0;
+  const urls = ['https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@' + date + '/v1/currencies/jpy.min.json', 'https://' + date + '.currency-api.pages.dev/v1/currencies/jpy.min.json'];
+  for (const u of urls) {
+    try {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 6000);
+      const j = await fetch(u, { signal: ctl.signal }).then(r => r.json()); clearTimeout(t);
+      const v = j && j.jpy && Number(j.jpy.twd);
+      if (v > 0) { const r4 = Math.round(v * 1e4) / 1e4; c[date] = r4; await kvSet('fxCache', c); return r4; }
+    } catch (e) { /* 換下一個來源 */ }
+  }
+  return 0;
+}
+async function autoFx() {
+  if (!F || F.readonly || F.fxTouched) return;
+  const d = $('#fDate') && $('#fDate').value, el = $('#fFx');
+  if (!d || !el) return;
+  const v = await fxForDate(d);
+  if (v && $('#fFx') && !F.fxTouched && $('#fDate').value === d) { $('#fFx').value = v.toFixed(4); updateCalc(); }
+}
 const RCATS = ['飲食', '藥妝', '電器', '服飾雜貨', '百貨', '綜合量販', '其他'];
 const PIE_COLORS = ['#1F3A5F', '#B5452F', '#3E6B8C', '#C9962B', '#5E8C61', '#8A5A8C', '#7A8794'];
 function spendByCategory(list) {
@@ -893,7 +918,7 @@ function applyOcr(o) {
   if (m) { $('#fStore').value = m.name; }
   else if (o.store) { $('#fStore').value = '__other'; $('#fStoreOther').value = String(o.store).slice(0, 40); }
   autoRefund();
-  if (o.date && /^\d{4}-\d{2}-\d{2}$/.test(o.date)) $('#fDate').value = o.date;
+  if (o.date && /^\d{4}-\d{2}-\d{2}$/.test(o.date)) { $('#fDate').value = o.date; autoFx(); }
   if (o.totalIncl > 0) {
     $('#fIncl').value = o.totalIncl;
     const r = (o.rate === 8 || o.rate === 10) ? o.rate : 10;
@@ -1010,6 +1035,7 @@ async function batchOcr() {
         amountIncl: incl, tax, amountExcl: incl - tax, rate, needsReview: true,
         refundCo: r.refundCo || lastRefundFor(store), sync: r.sync === 'add' ? 'add' : 'update'
       });
+      { const v = await fxForDate(r.date); if (v) r.fx = v; }
       await putReceipt(r);
       ok++;
     } catch (e) {
@@ -1255,11 +1281,12 @@ document.addEventListener('change', e => {
   else if (el.closest && el.closest('#modal')) {
     if (el.id === 'fRefund' && F) F.refundTouched = true;
     if (el.id === 'fStore' && F) autoRefund();
+    if (el.id === 'fDate') autoFx();
     if (el.id === 'fProxy') { const w = $('#fProxyWrap'); if (w) w.style.display = el.checked ? '' : 'none'; }
     updateCalc();
   }
 });
-document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#modal')) updateCalc(); });
+document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#modal')) { if (e.target.id === 'fFx' && F) F.fxTouched = true; updateCalc(); } });
 ['fileCam', 'filePick'].forEach(id => $('#' + id).addEventListener('change', e => { handlePhoto(e.target.files[0]); e.target.value = ''; }));
 $('#fileMulti').addEventListener('change', e => { handleMulti(e.target.files); e.target.value = ''; });
 $('#fileBackup').addEventListener('change', e => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ''; });
