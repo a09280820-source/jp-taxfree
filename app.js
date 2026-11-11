@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.7.0';
+const VERSION = '1.7.2';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -459,8 +459,33 @@ function viewHome() {
     if (d <= 14) alerts.push('<div class="alert ' + (d <= 7 ? 'bad' : 'warn') + '"><b>' + esc(g.store) + '</b>（' + esc(g.date) + '）' + (d < 0 ? '已超過出境期限' : '要在 ' + d + ' 天內出境') + '</div>');
   });
   h += '<div class="section"><h2>提醒</h2>' + (alerts.length ? alerts.join('') : '<p class="muted">沒有待辦</p>') + '</div>';
+  h += pieCard(list, rt);
   h += '<p class="small muted">1 日圓 ＝ ' + rt.toFixed(4) + ' 台幣 · ' + esc(rateNote()) + '</p>';
   return h;
+}
+
+
+/* ----- 花費分類圓餅圖（依店家分類，不含代購） ----- */
+const PIE_COLORS = ['#1F3A5F', '#B5452F', '#3E6B8C', '#C9962B', '#5E8C61', '#8A5A8C', '#7A8794'];
+function spendByCategory(list) {
+  const cat = {};
+  S.stores.forEach(st => { cat[st.name] = st.category || '其他'; });
+  const m = {};
+  list.filter(r => !r.proxy && r.amountIncl > 0 && !isDraft(r)).forEach(r => { const c = cat[r.store] || '其他'; m[c] = (m[c] || 0) + r.amountIncl; });
+  return Object.keys(m).map(k => ({ k, v: m[k] })).sort((a, b) => b.v - a.v);
+}
+function pieCard(list, rt) {
+  const rows = spendByCategory(list), tot = rows.reduce((a, x) => a + x.v, 0);
+  if (!tot) return '';
+  const R = 15.915, CIR = 100; let off = 25, segs = '', leg = '';
+  rows.forEach((x, i) => {
+    const p = x.v / tot * 100, col = PIE_COLORS[i % PIE_COLORS.length];
+    segs += '<circle cx="21" cy="21" r="' + R + '" fill="none" stroke="' + col + '" stroke-width="7" stroke-dasharray="' + p.toFixed(3) + ' ' + (CIR - p).toFixed(3) + '" stroke-dashoffset="' + off.toFixed(3) + '"></circle>';
+    off -= p;
+    leg += '<div class="pie-row"><span class="dot" style="background:' + col + '"></span><span class="pie-k">' + esc(x.k) + '</span><span class="pie-v num">' + yen(x.v) + '</span><span class="pie-p num">' + Math.round(p) + '%</span></div>';
+  });
+  return '<div class="section"><h2>花費分類</h2><div class="card"><div class="pie-wrap"><svg viewBox="0 0 42 42" class="pie">' + segs + '</svg></div>' + leg +
+    '<div class="pie-row pie-tot"><span class="pie-k">合計（不含代購）</span><span class="pie-v num">' + yen(tot) + '</span><span class="pie-p small muted">≈ ' + twd(C.toTWD(tot, rt)) + '</span></div></div></div>';
 }
 
 /* ----- 退稅公司篩選與統計 ----- */
@@ -1130,8 +1155,10 @@ function viewCoupons() {
   const used = S.cu || {};
   const list = COUPONS.map(c => ({ c, st: couponState(c) })).sort((a, b) => (a.st.gone - b.st.gone) || (!!used[a.c.id] - !!used[b.c.id]) || (a.st.days - b.st.days));
   let h = '<section class="section"><h2>優惠券 <span class="small muted">' + COUPONS.length + ' 張</span></h2>' +
+    '<div class="field" style="margin-bottom:10px"><select id="cpFilter" class="select"><option value="">全部店家（' + COUPONS.length + ' 張）</option>' +
+    list.map(({ c }) => '<option value="' + c.id + '"' + (S.cpFilter === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select></div>' +
     '<p class="small muted" style="margin-bottom:10px">點圖放大，結帳時給店員掃條碼。先把螢幕調亮。到期近的排前面。</p>';
-  list.forEach(({ c, st }) => {
+  list.filter(({ c }) => !S.cpFilter || c.id === S.cpFilter).forEach(({ c, st }) => {
     const u = !!used[c.id];
     h += '<div class="card cp' + (st.gone ? ' gone' : '') + (u ? ' used' : '') + '" data-act="coupon" data-id="' + c.id + '">' +
       '<div class="cp-img" style="background-image:url(coupons/' + c.id + '-t.jpg)"></div>' +
@@ -1219,6 +1246,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.matches && el.matches('input[data-act="pack"]')) handlers.pack(el);
+  else if (el.id === 'cpFilter') { S.cpFilter = el.value; el.blur(); render(); }
   else if (el.id === 'refundFilter') { S.refundFilter = el.value; el.blur(); render(); }
   else if (el.closest && el.closest('#modal')) {
     if (el.id === 'fRefund' && F) F.refundTouched = true;

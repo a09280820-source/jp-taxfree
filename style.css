@@ -160,3 +160,11 @@ main { padding: 14px 16px; }
 .cp-exp.gone { color: var(--red); }
 .cp.gone, .cp.used { opacity: .5; }
 .cp-full { width: 100%; display: block; border: 1px solid var(--line); border-radius: 3px; background: #fff; }
+
+/* 圓餅圖 */
+.pie-wrap { display: flex; justify-content: center; margin: 4px 0 12px; }
+.pie { width: 170px; height: 170px; }
+.pie-row { display: grid; grid-template-columns: 12px 1fr auto 44px; gap: 8px; align-items: center; padding: 5px 0; font-size: 14px; }
+.pie-row .dot { width: 10px; height: 10px; border-radius: 2px; }
+.pie-v, .pie-p { text-align: right; }
+.pie-tot { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 9px; grid-template-columns: 1fr auto auto; font-weight: 700; }
