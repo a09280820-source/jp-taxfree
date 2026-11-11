@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.8.0';
+const VERSION = '1.8.1';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -1154,37 +1154,34 @@ function couponState(c) {
   return { cls: '', txt: '到 ' + t, days: d, gone: false };
 }
 function viewCoupons() {
-  const used = S.cu || {};
-  const list = COUPONS.map(c => ({ c, st: couponState(c) })).sort((a, b) => (a.st.gone - b.st.gone) || (!!used[a.c.id] - !!used[b.c.id]) || (a.st.days - b.st.days));
+  const list = COUPONS.map(c => ({ c, st: couponState(c) })).sort((a, b) => (a.st.gone - b.st.gone) || (a.st.days - b.st.days));
   let h = '<section class="section"><h2>優惠券 <span class="small muted">' + COUPONS.length + ' 張</span></h2>' +
     '<div class="field" style="margin-bottom:10px"><select id="cpFilter" class="select"><option value="">全部店家（' + COUPONS.length + ' 張）</option>' +
     list.map(({ c }) => '<option value="' + c.id + '"' + (S.cpFilter === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select></div>' +
     '<p class="small muted" style="margin-bottom:10px">點圖放大，結帳時給店員掃條碼。先把螢幕調亮。到期近的排前面。</p>';
   list.filter(({ c }) => !S.cpFilter || c.id === S.cpFilter).forEach(({ c, st }) => {
-    const u = !!used[c.id];
-    h += '<div class="card cp' + (st.gone ? ' gone' : '') + (u ? ' used' : '') + '" data-act="coupon" data-id="' + c.id + '">' +
+    h += '<div class="card cp' + (st.gone ? ' gone' : '') + '" data-act="coupon" data-id="' + c.id + '">' +
       '<div class="cp-img" style="background-image:url(coupons/' + c.id + '-t.jpg)"></div>' +
       '<div class="cp-body"><div class="cp-name">' + esc(c.name) + '</div><div class="cp-off">' + esc(c.off) + '</div>' +
-      '<div class="cp-exp ' + st.cls + '">' + st.txt + '</div>' + (u ? '<div class="small muted">✓ 已用過</div>' : '') + '</div></div>';
+      '<div class="cp-exp ' + st.cls + '">' + st.txt + '</div>' + '</div></div>';
   });
   return h + '</section>';
 }
 function openCoupon(id) {
   const c = COUPONS.find(x => x.id === id); if (!c) return;
-  const st = couponState(c), u = !!(S.cu || {})[id];
+  const st = couponState(c);
   openModal('<div class="sheet"><div class="sheet-head"><h2>' + esc(c.name) + '</h2><button class="x" data-act="close-modal">×</button></div>' +
     '<p><b>' + esc(c.off) + '</b> · <span class="cp-exp ' + st.cls + '">' + st.txt + '</span></p>' +
     '<p class="small" style="margin:6px 0">' + esc(c.info) + '</p>' +
     (c.must ? '<p class="small" style="color:var(--red);font-weight:700">⚠ ' + esc(c.must) + '</p>' : '') +
     '<img class="cp-full" src="coupons/' + c.id + '.jpg" alt="' + esc(c.name) + '優惠券">' +
-    '<p style="margin-top:12px"><button class="btn line" data-act="coupon-used" data-id="' + id + '">' + (u ? '取消「已用過」' : '標記「已用過」') + '</button></p></div>');
+    '</div>');
 }
 
 /* ========== 事件 ========== */
 const handlers = {
   tab(el) { S.view = el.dataset.v; render(); window.scrollTo(0, 0); },
   coupon(el) { openCoupon(el.dataset.id); },
-  async 'coupon-used'(el) { S.cu = S.cu || {}; const id = el.dataset.id; if (S.cu[id]) delete S.cu[id]; else S.cu[id] = 1; await kvSet('couponUsed', S.cu); closeModal(); render(); },
   scope(el) { S.scope = el.dataset.v; kvSet('scope', S.scope); render(true); },
   sync() { sync(true); },
   new() { openReceipt(null); },
@@ -1283,7 +1280,6 @@ async function boot() {
     S.receipts = await allReceipts();
     S.token = token || null; S.budgetDirty = !!bd; S.stores = stores || []; S.users = users || [];
     if (scope) S.scope = scope;
-    S.cu = (await kvGet('couponUsed')) || {};
     if (user) {
       S.user = user;
       showApp();
