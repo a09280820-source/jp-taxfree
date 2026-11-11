@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.7.2';
+const VERSION = '1.8.0';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -273,7 +273,7 @@ async function pullInit() {
 
 const pickFields = r => ({
   id: r.id, date: r.date, store: r.store, amountIncl: r.amountIncl, tax: r.tax, amountExcl: r.amountExcl,
-  rate: r.rate, note: r.note, packed: r.packed, needsReview: r.needsReview, createdAt: r.createdAt, refundCo: r.refundCo || '', consumed: !!r.consumed, proxy: !!r.proxy, proxyFor: r.proxyFor || ''
+  rate: r.rate, note: r.note, packed: r.packed, needsReview: r.needsReview, createdAt: r.createdAt, refundCo: r.refundCo || '', consumed: !!r.consumed, proxy: !!r.proxy, proxyFor: r.proxyFor || '', category: r.category || ''
 });
 
 async function pushPending() {
@@ -466,12 +466,13 @@ function viewHome() {
 
 
 /* ----- 花費分類圓餅圖（依店家分類，不含代購） ----- */
+const RCATS = ['飲食', '藥妝', '電器', '服飾雜貨', '百貨', '綜合量販', '其他'];
 const PIE_COLORS = ['#1F3A5F', '#B5452F', '#3E6B8C', '#C9962B', '#5E8C61', '#8A5A8C', '#7A8794'];
 function spendByCategory(list) {
   const cat = {};
   S.stores.forEach(st => { cat[st.name] = st.category || '其他'; });
   const m = {};
-  list.filter(r => !r.proxy && r.amountIncl > 0 && !isDraft(r)).forEach(r => { const c = cat[r.store] || '其他'; m[c] = (m[c] || 0) + r.amountIncl; });
+  list.filter(r => !r.proxy && r.amountIncl > 0 && !isDraft(r)).forEach(r => { const c = r.category || cat[r.store] || '其他'; m[c] = (m[c] || 0) + r.amountIncl; });
   return Object.keys(m).map(k => ({ k, v: m[k] })).sort((a, b) => b.v - a.v);
 }
 function pieCard(list, rt) {
@@ -776,6 +777,7 @@ function renderForm() {
     '<div class="two"><div class="field"><label>稅率</label><select id="fRate" class="select"' + ro + '><option value="10"' + (rateSel === '10' ? ' selected' : '') + '>10%（一般商品）</option><option value="8"' + (rateSel === '8' ? ' selected' : '') + '>8%（食品、飲料）</option><option value="x"' + (rateSel === 'x' ? ' selected' : '') + '>混合／自填稅額</option></select></div>' +
     '<div class="field" id="fTaxWrap"><label>消費稅額（日圓）</label><input id="fTax" class="input num" type="number" inputmode="numeric" value="' + esc(b.tax || '') + '" placeholder="收據上的内消費税"' + ro + '></div></div>' +
     '<div id="calcBox" class="calcbox"></div>' +
+    '<div class="field"><label>類別（圓餅圖用）</label><select id="fCat" class="select"' + ro + '><option value="">自動（依店家分類）</option>' + RCATS.map(c => '<option value="' + c + '"' + (b.category === c ? ' selected' : '') + '>' + c + '</option>').join('') + '</select></div>' +
     '<div class="field"><label>備註</label><input id="fNote" class="input" value="' + esc(b.note || '') + '" placeholder="例如：化妝水、零食"' + ro + '></div>' +
     '<label class="check" style="margin:0 0 6px"><input id="fPacked" type="checkbox"' + (b.packed ? ' checked' : '') + ro + '> 已放進隨身行李</label>' +
     '<label class="check" style="margin:0 0 2px"><input id="fConsumed" type="checkbox"' + (b.consumed ? ' checked' : '') + ro + '> 馬上吃掉／使用</label>' +
@@ -819,7 +821,7 @@ function readForm() {
     tax = Math.max(0, Math.min(incl, Math.round(Number($('#fTax').value) || 0)));
     rate = incl - tax > 0 ? Math.round(tax / (incl - tax) * 100) : 10;
   } else { rate = Number(rs); tax = C.splitTax(incl, rate).tax; }
-  return { store, date: $('#fDate').value, incl, rate, rs, tax, excl: incl - tax, note: $('#fNote').value.trim(), packed: $('#fPacked').checked, consumed: $('#fConsumed') ? $('#fConsumed').checked : false, refundCo: $('#fRefund') ? $('#fRefund').value : '', proxy: $('#fProxy') ? $('#fProxy').checked : false, proxyFor: $('#fProxyFor') ? $('#fProxyFor').value.trim() : '' };
+  return { store, date: $('#fDate').value, incl, rate, rs, tax, excl: incl - tax, note: $('#fNote').value.trim(), packed: $('#fPacked').checked, consumed: $('#fConsumed') ? $('#fConsumed').checked : false, refundCo: $('#fRefund') ? $('#fRefund').value : '', proxy: $('#fProxy') ? $('#fProxy').checked : false, proxyFor: $('#fProxyFor') ? $('#fProxyFor').value.trim() : '', category: $('#fCat') ? $('#fCat').value : '' };
 }
 
 function updateCalc() {
@@ -906,7 +908,7 @@ async function saveForm() {
   const rec = {
     id: F.id, owner: S.user.email, ownerName: S.user.name,
     date: f.date, store: f.store, amountIncl: f.incl, tax: f.tax, amountExcl: f.excl, rate: f.rate,
-    note: f.note, packed: f.packed, consumed: f.consumed, proxy: f.proxy, proxyFor: f.proxy ? f.proxyFor : '', refundCo: f.refundCo, needsReview: f.incl === 0,
+    note: f.note, packed: f.packed, consumed: f.consumed, proxy: f.proxy, proxyFor: f.proxy ? f.proxyFor : '', category: f.category, refundCo: f.refundCo, needsReview: f.incl === 0,
     photoFileId: base ? base.photoFileId || '' : '',
     createdAt: base ? base.createdAt : Date.now(),
     sync: (!base || base.sync === 'add') ? 'add' : 'update'
