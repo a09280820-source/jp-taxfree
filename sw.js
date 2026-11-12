@@ -1,5 +1,5 @@
 /* 離線快取：App 本體優先用網路（有更新就拿新的），沒網路就用快取 */
-const CACHE = 'jptax-v26';
+const CACHE = 'jptax-v27';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'calc.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 const COUPON_FILES = ["coupons/alpen.jpg", "coupons/alpen-t.jpg", "coupons/cosmos.jpg", "coupons/cosmos-t.jpg", "coupons/snowpeak.jpg", "coupons/snowpeak-t.jpg", "coupons/keio.jpg", "coupons/keio-t.jpg", "coupons/matsumoto.jpg", "coupons/matsumoto-t.jpg", "coupons/cocokara.jpg", "coupons/cocokara-t.jpg", "coupons/sapporo.jpg", "coupons/sapporo-t.jpg", "coupons/drug11.jpg", "coupons/drug11-t.jpg", "coupons/sugi.jpg", "coupons/sugi-t.jpg", "coupons/yamada.jpg", "coupons/yamada-t.jpg", "coupons/biccamera.jpg", "coupons/biccamera-t.jpg", "coupons/daimaru.jpg", "coupons/daimaru-t.jpg", "coupons/tsuruha.jpg", "coupons/tsuruha-t.jpg", "coupons/sundrug.jpg", "coupons/sundrug-t.jpg", "coupons/kokumin.jpg", "coupons/kokumin-t.jpg", "coupons/edion.jpg", "coupons/edion-t.jpg"];
 const STATIC_HOSTS = ['cdn.sheetjs.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];

@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG;
 const REFUND_COS = CFG.REFUND_COMPANIES || ['J&J Tax Free（J-TaxRefund）', 'PIE VAT', 'Smart Detax（JP Refund）', 'Global Blue', '其他／不確定'];
 const C = window.Calc;
 const TH = CFG.THRESHOLD_JPY;
-const VERSION = '1.9.1';
+const VERSION = '1.9.2';
 
 /* ========== 小工具 ========== */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -494,7 +494,7 @@ async function autoFx() {
   const v = await fxForDate(d);
   if (v && $('#fFx') && !F.fxTouched && $('#fDate').value === d) { $('#fFx').value = v.toFixed(4); updateCalc(); }
 }
-const RCATS = ['飲食', '藥妝', '電器', '服飾雜貨', '百貨', '綜合量販', '其他'];
+const RCATS = ['飲食', '交通', '藥妝', '電器', '服飾雜貨', '百貨', '綜合量販', '其他'];
 const PIE_COLORS = ['#1F3A5F', '#B5452F', '#3E6B8C', '#C9962B', '#5E8C61', '#8A5A8C', '#7A8794'];
 function spendByCategory(list) {
   const cat = {};
